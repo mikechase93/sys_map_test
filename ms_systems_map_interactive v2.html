@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MS Society — Interactive Systems Map</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg:#0a0a0a; --surface:#111; --s2:#181818; --s3:#1f1f1f; --s4:#262626;
+  --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.13); --border3:rgba(255,255,255,0.22);
+  --text:#e2e0da; --muted:#666260; --faint:#1a1a1a;
+  --teal:#1D9E75; --blue:#4A9FE8; --purple:#8B82E8; --amber:#EF9F27;
+  --pink:#D4537E; --coral:#D8633A; --green:#5DB870; --slate:#7A9BBF; --rose:#C97070;
+  --rag-g:#1D9E75; --rag-a:#EF9F27; --rag-r:#E24B4A; --rag-u:#3a3a3a;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text)}
+
+/* ── TOPBAR ── */
+#topbar{
+  position:fixed;top:0;left:0;right:0;height:52px;
+  background:rgba(10,10,10,0.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border2);
+  display:flex;align-items:center;gap:12px;padding:0 16px;
+  z-index:100;
+}
+#logo{font-size:13px;font-weight:600;letter-spacing:-.2px;white-space:nowrap;margin-right:4px}
+#logo span{color:var(--teal)}
+#search-wrap{position:relative;flex:1;max-width:280px}
+#search-wrap svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);opacity:.4;pointer-events:none}
+#search{
+  width:100%;background:var(--s2);border:1px solid var(--border2);
+  border-radius:7px;padding:6px 10px 6px 30px;font-size:12px;
+  font-family:'DM Sans',sans-serif;color:var(--text);outline:none;
+}
+#search:focus{border-color:var(--teal);background:var(--s3)}
+#search::placeholder{color:var(--muted)}
+.tb-pills{display:flex;gap:6px;flex-wrap:nowrap}
+.tp{
+  font-size:10px;font-family:'DM Mono',monospace;padding:4px 9px;
+  border-radius:5px;border:1px solid var(--border2);background:var(--s2);
+  color:var(--muted);cursor:pointer;white-space:nowrap;transition:all .15s;
+}
+.tp:hover{border-color:var(--border3);color:var(--text)}
+.tp.active{background:var(--s3);border-color:var(--border3);color:var(--text)}
+.tp.rag-g{color:var(--rag-g);border-color:rgba(29,158,117,.35)}
+.tp.rag-g.active{background:rgba(29,158,117,.12)}
+.tp.rag-a{color:var(--rag-a);border-color:rgba(239,159,39,.35)}
+.tp.rag-a.active{background:rgba(239,159,39,.12)}
+.tp.rag-r{color:var(--rag-r);border-color:rgba(226,75,74,.35)}
+.tp.rag-r.active{background:rgba(226,75,74,.12)}
+#tb-right{margin-left:auto;display:flex;gap:6px;align-items:center}
+.icon-btn{
+  width:30px;height:30px;border-radius:6px;border:1px solid var(--border2);
+  background:var(--s2);color:var(--muted);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;font-size:14px;
+}
+.icon-btn:hover{border-color:var(--border3);color:var(--text)}
+#zoom-label{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);min-width:36px;text-align:center}
+
+/* ── CANVAS ── */
+#canvas-wrap{
+  position:fixed;top:52px;left:0;right:0;bottom:0;
+  overflow:hidden;cursor:grab;
+  background:var(--bg);
+  background-image:radial-gradient(circle,rgba(255,255,255,.025) 1px,transparent 1px);
+  background-size:24px 24px;
+}
+#canvas-wrap.grabbing{cursor:grabbing}
+#canvas{position:absolute;transform-origin:0 0;will-change:transform}
+
+/* ── SVG CONNECTOR LAYER ── */
+#svg-layer{position:absolute;top:0;left:0;pointer-events:none;overflow:visible}
+.conn-path{fill:none;stroke-width:1.5;transition:opacity .2s,stroke-width .2s}
+.conn-path.dimmed{opacity:.08}
+.conn-path.highlighted{stroke-width:2.5;opacity:1}
+.conn-label-bg{fill:var(--bg);rx:3}
+.conn-label-text{font-family:'DM Mono',monospace;font-size:9px;fill:var(--muted)}
+
+/* ── CLUSTER CARDS ── */
+.cluster{
+  position:absolute;border-radius:11px;border:1px solid;
+  background:var(--s2);min-width:230px;max-width:270px;
+  transition:box-shadow .2s,opacity .2s,border-color .2s;
+  cursor:pointer;user-select:none;
+}
+.cluster:hover{box-shadow:0 0 0 2px rgba(255,255,255,.08)}
+.cluster.selected{box-shadow:0 0 0 2px rgba(255,255,255,.25)}
+.cluster.dimmed{opacity:.2}
+.cl-head{
+  padding:9px 12px 8px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  border-radius:10px 10px 0 0;
+}
+.cl-name{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;font-family:'DM Mono',monospace}
+.cl-count{font-size:9px;font-family:'DM Mono',monospace;color:var(--muted)}
+.cl-body{padding:7px;display:flex;flex-direction:column;gap:3px}
+.nd{
+  border-radius:6px;border:1px solid var(--border);
+  padding:6px 8px;background:var(--s3);
+  transition:border-color .15s,background .15s;
+}
+.nd:hover{border-color:var(--border2);background:var(--s4)}
+.nd-name{font-size:11px;font-weight:500;color:var(--text);line-height:1.3}
+.nd-meta{font-size:9px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:1px}
+.nd-row{display:flex;align-items:center;gap:4px;margin-top:4px;flex-wrap:wrap}
+.rag{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.rag.g{background:var(--rag-g)}.rag.a{background:var(--rag-a)}.rag.r{background:var(--rag-r)}.rag.u{background:var(--rag-u)}
+.crit{font-size:8px;font-family:'DM Mono',monospace;padding:1px 5px;border-radius:3px;border:1px solid}
+.crit.mc{color:var(--rag-g);border-color:rgba(29,158,117,.3);background:rgba(29,158,117,.07)}
+.crit.bc{color:var(--blue);border-color:rgba(74,159,232,.3);background:rgba(74,159,232,.07)}
+.crit.imp{color:var(--muted);border-color:var(--border2);background:var(--faint)}
+.cost{font-size:9px;font-family:'DM Mono',monospace;color:var(--amber);margin-left:auto}
+
+/* Cluster colour themes */
+.cluster.crm{border-color:rgba(29,158,117,.45)}.cluster.crm .cl-head{background:rgba(29,158,117,.1)}.cluster.crm .cl-name{color:var(--teal)}
+.cluster.cms{border-color:rgba(74,159,232,.4)}.cluster.cms .cl-head{background:rgba(74,159,232,.1)}.cluster.cms .cl-name{color:var(--blue)}
+.cluster.digital{border-color:rgba(139,130,232,.4)}.cluster.digital .cl-head{background:rgba(139,130,232,.1)}.cluster.digital .cl-name{color:var(--purple)}
+.cluster.email{border-color:rgba(239,159,39,.4)}.cluster.email .cl-head{background:rgba(239,159,39,.1)}.cluster.email .cl-name{color:var(--amber)}
+.cluster.social{border-color:rgba(212,83,126,.4)}.cluster.social .cl-head{background:rgba(212,83,126,.1)}.cluster.social .cl-name{color:var(--pink)}
+.cluster.analytics{border-color:rgba(216,99,58,.4)}.cluster.analytics .cl-head{background:rgba(216,99,58,.1)}.cluster.analytics .cl-name{color:var(--coral)}
+.cluster.fundraising{border-color:rgba(93,184,112,.4)}.cluster.fundraising .cl-head{background:rgba(93,184,112,.1)}.cluster.fundraising .cl-name{color:var(--green)}
+.cluster.services{border-color:rgba(122,155,191,.4)}.cluster.services .cl-head{background:rgba(122,155,191,.1)}.cluster.services .cl-name{color:var(--slate)}
+.cluster.infra{border-color:rgba(201,112,112,.4)}.cluster.infra .cl-head{background:rgba(201,112,112,.1)}.cluster.infra .cl-name{color:var(--rose)}
+
+/* ── DETAIL PANEL ── */
+#detail{
+  position:fixed;right:0;top:52px;bottom:0;width:320px;
+  background:rgba(14,14,14,.96);backdrop-filter:blur(16px);
+  border-left:1px solid var(--border2);
+  transform:translateX(100%);transition:transform .25s cubic-bezier(.4,0,.2,1);
+  z-index:90;overflow-y:auto;
+}
+#detail.open{transform:translateX(0)}
+#detail-close{
+  position:sticky;top:0;width:100%;
+  background:rgba(14,14,14,.9);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border);
+  padding:12px 16px;display:flex;align-items:center;justify-content:space-between;
+  cursor:pointer;
+}
+#detail-close-btn{
+  width:24px;height:24px;border-radius:5px;border:1px solid var(--border2);
+  background:var(--s2);color:var(--muted);display:flex;align-items:center;justify-content:center;
+  font-size:14px;cursor:pointer;flex-shrink:0;
+}
+#detail-title{font-size:13px;font-weight:600}
+#detail-body{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.d-section-title{font-size:9px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:6px}
+.d-row{display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--border);gap:8px;font-size:11px}
+.d-row:last-child{border-bottom:none}
+.d-label{color:var(--muted);flex-shrink:0}
+.d-val{color:var(--text);text-align:right;font-family:'DM Mono',monospace;font-size:10px}
+.d-node{
+  border-radius:6px;border:1px solid var(--border);padding:7px 9px;
+  background:var(--s3);margin-bottom:3px;
+}
+.d-node-name{font-size:11px;font-weight:500}
+.d-node-meta{font-size:9px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:1px}
+.d-conn{
+  border-radius:5px;border:1px solid var(--border);padding:6px 8px;
+  background:var(--faint);margin-bottom:3px;font-size:10px;
+  display:flex;align-items:center;gap:6px;
+}
+.d-conn-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.d-conn-text{color:var(--muted);font-family:'DM Mono',monospace}
+.d-conn-name{color:var(--text);font-weight:500}
+
+/* ── MINI MAP ── */
+#minimap{
+  position:fixed;bottom:16px;right:16px;
+  width:160px;height:100px;
+  background:rgba(14,14,14,.85);backdrop-filter:blur(8px);
+  border:1px solid var(--border2);border-radius:8px;
+  overflow:hidden;z-index:90;
+}
+#minimap canvas{width:100%;height:100%}
+#minimap-viewport{
+  position:absolute;border:1px solid rgba(255,255,255,.3);
+  border-radius:2px;pointer-events:none;
+  background:rgba(255,255,255,.04);
+}
+
+/* ── TOAST ── */
+#toast{
+  position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(60px);
+  background:var(--s3);border:1px solid var(--border2);border-radius:7px;
+  padding:8px 16px;font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);
+  transition:transform .3s;z-index:200;white-space:nowrap;pointer-events:none;
+}
+#toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ── SEARCH RESULTS OVERLAY ── */
+#search-results{
+  position:fixed;top:54px;left:50%;transform:translateX(-50%);
+  width:280px;background:var(--s2);border:1px solid var(--border2);
+  border-radius:8px;overflow:hidden;z-index:150;display:none;
+  box-shadow:0 8px 32px rgba(0,0,0,.5);
+}
+.sr-item{
+  padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);
+  transition:background .1s;
+}
+.sr-item:last-child{border-bottom:none}
+.sr-item:hover{background:var(--s3)}
+.sr-name{font-size:12px;font-weight:500}
+.sr-meta{font-size:9px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:1px}
+
+/* ── HELP OVERLAY ── */
+#help{
+  position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);
+  z-index:300;display:none;align-items:center;justify-content:center;
+}
+#help.open{display:flex}
+#help-box{
+  background:var(--s2);border:1px solid var(--border2);border-radius:12px;
+  padding:24px;max-width:360px;width:90%;
+}
+#help-box h2{font-size:15px;margin-bottom:14px}
+.help-row{display:flex;gap:10px;margin-bottom:10px;font-size:12px}
+.help-key{
+  font-family:'DM Mono',monospace;font-size:10px;padding:2px 7px;
+  border-radius:4px;border:1px solid var(--border2);background:var(--s3);
+  color:var(--text);white-space:nowrap;flex-shrink:0;
+}
+.help-desc{color:var(--muted);line-height:1.5}
+#help-close{
+  margin-top:16px;width:100%;padding:8px;border-radius:7px;
+  border:1px solid var(--border2);background:var(--s3);
+  color:var(--text);cursor:pointer;font-size:12px;
+}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div id="topbar">
+  <div id="logo">MS Society <span>Systems Map</span></div>
+
+  <div id="search-wrap">
+    <svg width="13" height="13" viewBox="0 0 13 13"><circle cx="5.5" cy="5.5" r="4" stroke="white" stroke-width="1.2" fill="none"/><line x1="8.5" y1="8.5" x2="12" y2="12" stroke="white" stroke-width="1.2" stroke-linecap="round"/></svg>
+    <input id="search" type="text" placeholder="Search systems, clusters…" autocomplete="off">
+  </div>
+
+  <div class="tb-pills" id="filter-pills">
+    <button class="tp active" data-filter="all">All</button>
+    <button class="tp rag-g" data-filter="green">Green RAG</button>
+    <button class="tp rag-a" data-filter="amber">Amber RAG</button>
+    <button class="tp rag-r" data-filter="red">Red RAG</button>
+    <button class="tp" data-filter="mission">Mission critical</button>
+  </div>
+
+  <div id="tb-right">
+    <span id="zoom-label">100%</span>
+    <button class="icon-btn" id="btn-zoomin" title="Zoom in">+</button>
+    <button class="icon-btn" id="btn-zoomout" title="Zoom out">−</button>
+    <button class="icon-btn" id="btn-fit" title="Fit to screen">⊡</button>
+    <button class="icon-btn" id="btn-help" title="Keyboard shortcuts">?</button>
+  </div>
+</div>
+
+<!-- SEARCH RESULTS -->
+<div id="search-results"></div>
+
+<!-- MAIN CANVAS -->
+<div id="canvas-wrap">
+  <div id="canvas">
+    <svg id="svg-layer"></svg>
+    <!-- clusters injected by JS -->
+  </div>
+</div>
+
+<!-- DETAIL PANEL -->
+<div id="detail">
+  <div id="detail-close">
+    <span id="detail-title">Cluster details</span>
+    <div id="detail-close-btn">×</div>
+  </div>
+  <div id="detail-body"></div>
+</div>
+
+<!-- MINIMAP -->
+<div id="minimap">
+  <canvas id="minimap-canvas" width="320" height="200"></canvas>
+  <div id="minimap-viewport"></div>
+</div>
+
+<!-- TOAST -->
+<div id="toast">Click a cluster to explore · Scroll to zoom · Drag to pan</div>
+
+<!-- HELP -->
+<div id="help">
+  <div id="help-box">
+    <h2>Keyboard shortcuts</h2>
+    <div class="help-row"><span class="help-key">scroll</span><span class="help-desc">Zoom in / out</span></div>
+    <div class="help-row"><span class="help-key">drag</span><span class="help-desc">Pan the canvas</span></div>
+    <div class="help-row"><span class="help-key">click cluster</span><span class="help-desc">Select and highlight connections</span></div>
+    <div class="help-row"><span class="help-key">Esc</span><span class="help-desc">Deselect / close panel</span></div>
+    <div class="help-row"><span class="help-key">F</span><span class="help-desc">Fit all clusters to screen</span></div>
+    <div class="help-row"><span class="help-key">+ / −</span><span class="help-desc">Zoom in / out</span></div>
+    <div class="help-row"><span class="help-key">/</span><span class="help-desc">Focus search</span></div>
+    <button id="help-close">Close</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  DATA
+// ═══════════════════════════════════════════════════════
+const CLUSTERS = [
+  {
+    id:'crm', label:'CRM & supporter data', type:'crm', x:0, y:0, color:'#1D9E75',
+    nodes:[
+      {name:'Dynamics 365',meta:'Central CRM · source of truth',rag:'a',crit:'mc'},
+      {name:'Azure',meta:'Underlying CRM hosting',rag:'g',crit:'mc'},
+      {name:'Assemble',meta:'Volunteer management system',rag:'g',crit:'mc'},
+      {name:'Data Lake / SQL Server',meta:'BI data infrastructure',rag:'u',crit:'mc'},
+    ]
+  },
+  {
+    id:'cms', label:'Website & CMS', type:'cms', x:0, y:0, color:'#4A9FE8',
+    nodes:[
+      {name:'Drupal (mssociety.org.uk)',meta:'Main website CMS',rag:'g',crit:'mc',cost:'£24,480'},
+      {name:'Acquia',meta:'Cloud hosting platform',rag:'g',crit:'mc',cost:'£27,800'},
+      {name:'Cloudflare',meta:'WAF & DDoS protection',rag:'g',crit:'mc',cost:'£3,120'},
+      {name:'Auth0',meta:'Identity & SSO login',rag:'a',crit:'imp',cost:'£2,400'},
+      {name:'SearchStax',meta:'Site search (Solr)',rag:'g',crit:'imp',cost:'Free'},
+      {name:'GoDaddy · DNS Made Easy',meta:'Domain & DNS management',rag:'g',crit:'mc',cost:'~£1,050'},
+      {name:'BitBucket · Github',meta:'Code repos & CI/CD',rag:'g',crit:'bc',cost:'£240'},
+      {name:'Google Tag Manager',meta:'Pixels & consent scripts',rag:'g',crit:'bc',cost:'Free'},
+      {name:'Drupal (volunteers site)',meta:'Drupal 7 — unsupported, retire',rag:'r',crit:'imp'},
+    ]
+  },
+  {
+    id:'digital', label:'Digital engagement', type:'digital', x:0, y:0, color:'#8B82E8',
+    nodes:[
+      {name:'Engaging Networks',meta:'Donations, campaigns, sign-ups',rag:'a',crit:'mc',cost:'£30,000'},
+      {name:'Meta Business Manager',meta:'Paid social ads management',rag:'g',crit:'mc',cost:'£0'},
+      {name:'Google Ads',meta:'PPC advertising (Torchbox)',rag:'g',crit:'imp'},
+      {name:'Microsoft Ads',meta:'Bing PPC · needs data review',rag:'a',crit:'bc'},
+      {name:'Cookiebot',meta:'Cookie consent management',rag:'g',crit:'bc',cost:'£1,944'},
+      {name:'YouTube',meta:'Video channel & hosting',rag:'g',crit:'bc',cost:'£0'},
+      {name:'Spotify · Apple · Amazon',meta:'Podcast distribution',rag:'g',crit:'imp',cost:'£0'},
+      {name:'WeTransfer · SFTP',meta:'Large file transfer',rag:'a',crit:'bc'},
+    ]
+  },
+  {
+    id:'email', label:'Email marketing', type:'email', x:0, y:0, color:'#EF9F27',
+    nodes:[
+      {name:'DotDigital',meta:'Email, SMS, webchat, journeys',rag:'g',crit:'bc',cost:'£26,052'},
+      {name:'SendGrid',meta:'Transactional & MFA emails',rag:'g',crit:'bc',cost:'£802'},
+    ]
+  },
+  {
+    id:'analytics', label:'Analytics & insight', type:'analytics', x:0, y:0, color:'#D8633A',
+    nodes:[
+      {name:'Google Analytics',meta:'Web behaviour measurement',rag:'g',crit:'bc',cost:'Free'},
+      {name:'FastStats',meta:'BI audience segmentation',rag:'r',crit:'bc'},
+      {name:'Looker Studio',meta:'GA-connected dashboards',rag:'g',crit:'imp',cost:'Free'},
+      {name:'Charity Tracker',meta:'Brand intelligence reporting',rag:'a',crit:'bc',cost:'£24,973'},
+      {name:'Google Search Console',meta:'Search performance data',rag:'g',crit:'imp',cost:'Free'},
+      {name:'Figma',meta:'Design & wireframing',rag:'g',crit:'imp',cost:'£840'},
+      {name:'Hotjar',meta:'Heatmapping — to replace',rag:'r',crit:'imp',cost:'£2,323'},
+      {name:'Alchemer',meta:'Survey tool',rag:'a',crit:'imp'},
+      {name:'Uptime Robot',meta:'Website availability monitoring',rag:'g',crit:'imp'},
+    ]
+  },
+  {
+    id:'social', label:'Social media', type:'social', x:0, y:0, color:'#D4537E',
+    nodes:[
+      {name:'Facebook · Instagram',meta:'Highest reach · Meta dependency',rag:'g',crit:'mc',cost:'£0'},
+      {name:'TikTok',meta:'Younger audiences · growing',rag:'g',crit:'bc',cost:'£0'},
+      {name:'LinkedIn',meta:'Professional engagement',rag:'g',crit:'bc',cost:'£0'},
+      {name:'Sprout Social',meta:'Scheduling & moderation hub',rag:'g',crit:'bc'},
+      {name:'Bluesky',meta:'Planned · replacing X',rag:'a',crit:'bc',cost:'£0'},
+      {name:'X (Twitter)',meta:'Retiring → moving to Bluesky',rag:'r',crit:'imp',cost:'£0'},
+      {name:'Pinterest · Linktree · Bitly',meta:'Supporting social tools',rag:'g',crit:'imp'},
+    ]
+  },
+  {
+    id:'services', label:'Services & support', type:'services', x:0, y:0, color:'#7A9BBF',
+    nodes:[
+      {name:'DMT Tool',meta:'Treatment decisions (Drupal)',rag:'g',crit:'mc'},
+      {name:'Discourse (Forum)',meta:'Community forum platform',rag:'g',crit:'mc'},
+      {name:'Call Handling',meta:'MS Help virtual call centre',rag:'g',crit:'mc'},
+      {name:'Elucidat (LMS)',meta:'Learning platform — costly',rag:'a',crit:'imp'},
+      {name:'NOPCommerce',meta:'Materials & merch orders',rag:'u',crit:'imp'},
+      {name:'OneTrust',meta:'Data compliance (DPIA/ROPA)',rag:'u',crit:'bc'},
+      {name:'Zoom · Miro · 8x8',meta:'Communications & collaboration',rag:'a',crit:'imp'},
+      {name:'DAMS (ResourceSpace)',meta:'Digital asset management',rag:'a',crit:'imp',cost:'£8,611'},
+    ]
+  },
+  {
+    id:'fundraising', label:'Fundraising & events', type:'fundraising', x:0, y:0, color:'#5DB870',
+    nodes:[
+      {name:'JustGiving',meta:'Primary fundraising platform',rag:'u',crit:'bc'},
+      {name:'Enthuse',meta:'London Marathon events',rag:'a',crit:'mc'},
+      {name:'Eventbrite',meta:'Event registrations',rag:'a',crit:'mc'},
+      {name:'PayPal · Stripe',meta:'Payment processing',rag:'g',crit:'bc'},
+      {name:'Muchloved',meta:'In-memory peer-to-peer giving',rag:'a',crit:'mc',cost:'£2,160'},
+      {name:'CFP Lottery · Woods Valldata',meta:'Lottery & raffle processing',rag:'u',crit:'mc'},
+      {name:'Payroll Giving · OMG',meta:'Salary & phone bill giving',rag:'a',crit:'mc'},
+      {name:'Ethical · REAL · Intygra',meta:'Telemarketing & direct mail',rag:'u',crit:'mc'},
+      {name:'Givergy · Funraisin',meta:'Events auctions & May 50k',rag:'a',crit:'mc'},
+    ]
+  },
+  {
+    id:'infra', label:'Infrastructure & compliance', type:'infra', x:0, y:0, color:'#C97070',
+    nodes:[
+      {name:'Microsoft Suite',meta:'Teams, Outlook, SharePoint',rag:'u',crit:'imp'},
+      {name:'ControlCase',meta:'Quarterly PCI scanning',rag:'g',crit:'bc',cost:'£990'},
+      {name:'Adobe Creative Cloud',meta:'Design suite — Mac only',rag:'g',crit:'bc'},
+      {name:'Canva · Shotcut',meta:'DIY design & video editing',rag:'a',crit:'imp'},
+      {name:'DAMS · ControlCase · OneTrust',meta:'Compliance & asset mgmt',rag:'u',crit:'bc'},
+    ]
+  },
+];
+
+const CONNECTIONS = [
+  {from:'cms',    to:'crm',         label:'Website → CRM',         color:'#4A9FE8', desc:'Drupal forms, GTM tracked links, Auth0 user data push to Dynamics'},
+  {from:'digital',to:'crm',         label:'EN → CRM',              color:'#8B82E8', desc:'Engaging Networks donation & supporter data pushed to Dynamics 365'},
+  {from:'email',  to:'crm',         label:'DotDigital ⇄ CRM',      color:'#EF9F27', desc:'Email marketing data push/pull via DotDigital–Dynamics connector'},
+  {from:'analytics',to:'crm',       label:'Analytics → CRM',       color:'#D8633A', desc:'Tracked links push conversion data; FastStats segments CRM data'},
+  {from:'social', to:'crm',         label:'Meta leads → CRM',      color:'#D4537E', desc:'Meta Lead Forms data pulled into DotDigital then into Dynamics'},
+  {from:'fundraising',to:'crm',     label:'Txn data → CRM',        color:'#5DB870', desc:'JustGiving, Enthuse, Eventbrite transaction data pushed to Dynamics'},
+  {from:'services',to:'crm',        label:'Auth0 → Forum/DMT',     color:'#7A9BBF', desc:'Auth0 SSO authenticates Discourse forum & DMT Tool users'},
+  {from:'infra',  to:'crm',         label:'Azure hosts CRM',        color:'#C97070', desc:'Azure provides underlying hosting and infrastructure for Dynamics 365'},
+  {from:'cms',    to:'digital',     label:'GTM · Auth0',            color:'#666',    desc:'Google Tag Manager and Auth0 shared across website and EN pages'},
+  {from:'digital',to:'email',       label:'Meta leads',             color:'#666',    desc:'Meta Business Manager feeds lead data into DotDigital'},
+  {from:'email',  to:'social',      label:'DotDigital → Meta',      color:'#666',    desc:'DotDigital connects to Meta for audience targeting and lead sync'},
+  {from:'cms',    to:'analytics',   label:'GA · GTM fire',          color:'#666',    desc:'GTM fires Google Analytics tags across all website pages'},
+  {from:'digital',to:'analytics',   label:'EN tracking',            color:'#666',    desc:'Engaging Networks page tracking connected to Google Analytics'},
+  {from:'analytics',to:'fundraising',label:'Conversion data',       color:'#666',    desc:'Google Analytics tracks donation page conversions from EN & JG'},
+];
+
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+let tx=0,ty=0,scale=1,dragging=false,dragStartX=0,dragStartY=0,txStart=0,tyStart=0;
+let selectedCluster=null,activeFilter='all',searchQuery='';
+const clusterEls={},clusterRects={};
+
+// ═══════════════════════════════════════════════════════
+//  BUILD CLUSTERS
+// ═══════════════════════════════════════════════════════
+const canvas=document.getElementById('canvas');
+const svgLayer=document.getElementById('svg-layer');
+
+function critLabel(c){return{mc:'mission critical',bc:'business critical',imp:'important'}[c]||c}
+
+CLUSTERS.forEach(cl=>{
+  const el=document.createElement('div');
+  el.className=`cluster ${cl.type}`;
+  el.id=`cl-${cl.id}`;
+  el.style.left=cl.x+'px';
+  el.style.top=cl.y+'px';
+  el.innerHTML=`
+    <div class="cl-head">
+      <span class="cl-name">${cl.label}</span>
+      <span class="cl-ct">${cl.nodes.length}</span>
+    </div>
+    <div class="cl-body">
+      ${cl.nodes.map(n=>`
+        <div class="nd" data-rag="${n.rag}" data-crit="${n.crit}">
+          <div class="nd-name">${n.name}</div>
+          <div class="nd-meta">${n.meta}</div>
+          <div class="nd-row">
+            <div class="rag ${n.rag}"></div>
+            <span class="crit ${n.crit}">${critLabel(n.crit)}</span>
+            ${n.cost?`<span class="cost">${n.cost}</span>`:''}
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+  el.addEventListener('click',e=>{e.stopPropagation();selectCluster(cl.id)});
+  canvas.appendChild(el);
+  clusterEls[cl.id]=el;
+});
+
+// ═══════════════════════════════════════════════════════
+//  SVG CONNECTIONS
+// ═══════════════════════════════════════════════════════
+const NS='http://www.w3.org/2000/svg';
+const pathEls={};
+
+function getClusterCenter(id){
+  const el=clusterEls[id];
+  const x=parseFloat(el.style.left);
+  const y=parseFloat(el.style.top);
+  const w=el.offsetWidth||250;
+  const h=el.offsetHeight||200;
+  return{x:x+w/2,y:y+h/2,left:x,top:y,right:x+w,bottom:y+h,w,h};
+}
+
+function getEdgePoint(rect,ox,oy){
+  // Find point on cluster border closest to other cluster center
+  const cx=rect.x,cy=rect.y;
+  const dx=ox-cx,dy=oy-cy;
+  const hw=rect.w/2,hh=rect.h/2;
+  if(Math.abs(dx)*hh>Math.abs(dy)*hw){
+    // left or right edge
+    const side=dx>0?1:-1;
+    return{x:cx+side*hw,y:cy+(dy/dx)*side*hw};
+  }else{
+    const side=dy>0?1:-1;
+    return{x:cx+(dx/dy)*side*hh,y:cy+side*hh};
+  }
+}
+
+function cubicPath(x1,y1,x2,y2){
+  const dx=x2-x1,dy=y2-y1;
+  const tension=Math.min(120,Math.abs(dx)*.5,Math.abs(dy)*.5)+60;
+  let cx1=x1,cy1=y1,cx2=x2,cy2=y2;
+  if(Math.abs(dx)>Math.abs(dy)){cx1+=tension;cx2-=tension;}
+  else{cy1+=tension;cy2-=tension;}
+  return`M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`;
+}
+
+// Build defs (arrowhead markers)
+const defs=document.createElementNS(NS,'defs');
+[...new Set(CONNECTIONS.map(c=>c.color))].forEach(color=>{
+  const mid=document.createElementNS(NS,'marker');
+  const safeId='arr-'+color.replace('#','');
+  mid.setAttribute('id',safeId);
+  mid.setAttribute('viewBox','0 0 8 8');
+  mid.setAttribute('refX','7');
+  mid.setAttribute('refY','4');
+  mid.setAttribute('markerWidth','5');
+  mid.setAttribute('markerHeight','5');
+  mid.setAttribute('orient','auto');
+  const p=document.createElementNS(NS,'path');
+  p.setAttribute('d','M1,1 L7,4 L1,7');
+  p.setAttribute('fill','none');
+  p.setAttribute('stroke',color);
+  p.setAttribute('stroke-width','1.5');
+  p.setAttribute('stroke-linecap','round');
+  p.setAttribute('stroke-linejoin','round');
+  mid.appendChild(p);
+  defs.appendChild(mid);
+});
+svgLayer.appendChild(defs);
+
+// Build paths
+CONNECTIONS.forEach((conn,i)=>{
+  const g=document.createElementNS(NS,'g');
+  g.setAttribute('data-conn',i);
+
+  const path=document.createElementNS(NS,'path');
+  path.classList.add('conn-path');
+  path.setAttribute('stroke',conn.color);
+  path.setAttribute('stroke-dasharray',conn.color==='#666'?'4,4':'none');
+  path.setAttribute('marker-end',`url(#arr-${conn.color.replace('#','')})`);
+  path.setAttribute('opacity',conn.color==='#666'?'0.35':'0.6');
+  g.appendChild(path);
+  pathEls[i]={path,g,conn};
+  svgLayer.appendChild(g);
+});
+
+function redrawConnections(){
+  const W=canvas.scrollWidth||3000,H=canvas.scrollHeight||3000;
+  svgLayer.setAttribute('width',W);
+  svgLayer.setAttribute('height',H);
+
+  Object.entries(pathEls).forEach(([i,{path,conn}])=>{
+    const a=getClusterCenter(conn.from);
+    const b=getClusterCenter(conn.to);
+    const ep1=getEdgePoint(a,b.x,b.y);
+    const ep2=getEdgePoint(b,a.x,a.y);
+    path.setAttribute('d',cubicPath(ep1.x,ep1.y,ep2.x,ep2.y));
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  PAN & ZOOM
+// ═══════════════════════════════════════════════════════
+const wrap=document.getElementById('canvas-wrap');
+
+function setTransform(newTx,newTy,newScale){
+  scale=Math.min(2,Math.max(.2,newScale));
+  tx=newTx; ty=newTy;
+  canvas.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
+  document.getElementById('zoom-label').textContent=Math.round(scale*100)+'%';
+  updateMinimap();
+}
+
+function fitAll(){
+  const vw=wrap.clientWidth,vh=wrap.clientHeight;
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  CLUSTERS.forEach(cl=>{
+    const el=clusterEls[cl.id];
+    const x=parseFloat(el.style.left),y=parseFloat(el.style.top);
+    const w=el.offsetWidth||250,h=el.offsetHeight||200;
+    minX=Math.min(minX,x);minY=Math.min(minY,y);
+    maxX=Math.max(maxX,x+w);maxY=Math.max(maxY,y+h);
+  });
+  const pad=60;
+  const cw=maxX-minX+pad*2,ch=maxY-minY+pad*2;
+  const s=Math.min(vw/cw,vh/ch,.95);
+  const newTx=(vw-cw*s)/2-minX*s+pad*s;
+  const newTy=(vh-ch*s)/2-minY*s+pad*s;
+  setTransform(newTx,newTy,s);
+}
+
+// Mouse pan
+wrap.addEventListener('mousedown',e=>{
+  if(e.button!==0)return;
+  dragging=true;dragStartX=e.clientX;dragStartY=e.clientY;txStart=tx;tyStart=ty;
+  wrap.classList.add('grabbing');
+});
+window.addEventListener('mousemove',e=>{
+  if(!dragging)return;
+  setTransform(txStart+e.clientX-dragStartX,tyStart+e.clientY-dragStartY,scale);
+});
+window.addEventListener('mouseup',()=>{dragging=false;wrap.classList.remove('grabbing')});
+
+// Scroll zoom
+wrap.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const rect=wrap.getBoundingClientRect();
+  const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  const delta=-e.deltaY*.001;
+  const newScale=Math.min(2,Math.max(.2,scale*(1+delta)));
+  const newTx=mx-(mx-tx)*(newScale/scale);
+  const newTy=my-(my-ty)*(newScale/scale);
+  setTransform(newTx,newTy,newScale);
+},{passive:false});
+
+// Touch pan/pinch
+let touches={};
+wrap.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  [...e.changedTouches].forEach(t=>touches[t.identifier]={x:t.clientX,y:t.clientY});
+  if(Object.keys(touches).length===1){
+    const t=e.touches[0];
+    dragging=true;dragStartX=t.clientX;dragStartY=t.clientY;txStart=tx;tyStart=ty;
+  }
+},{passive:false});
+wrap.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  const ids=Object.keys(touches);
+  if(ids.length===1&&dragging){
+    const t=e.touches[0];
+    setTransform(txStart+t.clientX-dragStartX,tyStart+t.clientY-dragStartY,scale);
+  }else if(ids.length===2){
+    const [a,b]=[...e.touches];
+    const prevA=touches[a.identifier],prevB=touches[b.identifier];
+    if(!prevA||!prevB)return;
+    const prevDist=Math.hypot(prevA.x-prevB.x,prevA.y-prevB.y);
+    const newDist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+    const ratio=newDist/prevDist;
+    const mx=(a.clientX+b.clientX)/2,my=(a.clientY+b.clientY)/2;
+    const newScale=Math.min(2,Math.max(.2,scale*ratio));
+    const newTx=mx-(mx-tx)*(newScale/scale);
+    const newTy=my-(my-ty)*(newScale/scale);
+    setTransform(newTx,newTy,newScale);
+    touches[a.identifier]={x:a.clientX,y:a.clientY};
+    touches[b.identifier]={x:b.clientX,y:b.clientY};
+  }
+},{passive:false});
+wrap.addEventListener('touchend',e=>{
+  [...e.changedTouches].forEach(t=>delete touches[t.identifier]);
+  if(Object.keys(touches).length===0)dragging=false;
+},{passive:false});
+
+// ═══════════════════════════════════════════════════════
+//  SELECTION & HIGHLIGHTING
+// ═══════════════════════════════════════════════════════
+function selectCluster(id){
+  if(selectedCluster===id){deselectAll();return;}
+  selectedCluster=id;
+
+  const connected=new Set([id]);
+  CONNECTIONS.forEach(c=>{
+    if(c.from===id)connected.add(c.to);
+    if(c.to===id)connected.add(c.from);
+  });
+
+  CLUSTERS.forEach(cl=>{
+    const el=clusterEls[cl.id];
+    if(cl.id===id){el.classList.add('selected');el.classList.remove('dimmed')}
+    else if(connected.has(cl.id)){el.classList.remove('selected','dimmed')}
+    else{el.classList.remove('selected');el.classList.add('dimmed')}
+  });
+
+  Object.entries(pathEls).forEach(([i,{path,g,conn}])=>{
+    const active=conn.from===id||conn.to===id;
+    path.classList.toggle('highlighted',active);
+    path.classList.toggle('dimmed',!active);
+  });
+
+  showDetail(id);
+}
+
+function deselectAll(){
+  selectedCluster=null;
+  CLUSTERS.forEach(cl=>{
+    clusterEls[cl.id].classList.remove('selected','dimmed');
+  });
+  Object.values(pathEls).forEach(({path})=>{
+    path.classList.remove('highlighted','dimmed');
+  });
+  closeDetail();
+}
+
+wrap.addEventListener('click',e=>{
+  if(e.target===wrap||e.target===canvas||e.target===svgLayer){deselectAll();}
+});
+
+// ═══════════════════════════════════════════════════════
+//  DETAIL PANEL
+// ═══════════════════════════════════════════════════════
+function showDetail(id){
+  const cl=CLUSTERS.find(c=>c.id===id);
+  const conns=CONNECTIONS.filter(c=>c.from===id||c.to===id);
+  const panel=document.getElementById('detail');
+  const title=document.getElementById('detail-title');
+  const body=document.getElementById('detail-body');
+  title.textContent=cl.label;
+
+  const ragMap={g:'Green · fit for purpose',a:'Amber · needs attention',r:'Red · not fit',u:'Unknown'};
+  const ragColor={g:'var(--rag-g)',a:'var(--rag-a)',r:'var(--rag-r)',u:'var(--muted)'};
+
+  body.innerHTML=`
+    <div>
+      <div class="d-section-title">Systems (${cl.nodes.length})</div>
+      ${cl.nodes.map(n=>`
+        <div class="d-node">
+          <div class="nd-row" style="margin-bottom:3px">
+            <div class="rag ${n.rag}"></div>
+            <span style="font-size:9px;font-family:'DM Mono',monospace;color:${ragColor[n.rag]}">${ragMap[n.rag]}</span>
+            ${n.cost?`<span class="cost">${n.cost}</span>`:''}
+          </div>
+          <div class="d-node-name">${n.name}</div>
+          <div class="d-node-meta">${n.meta}</div>
+        </div>
+      `).join('')}
+    </div>
+    <div>
+      <div class="d-section-title">Integrations (${conns.length})</div>
+      ${conns.map(c=>{
+        const other=c.from===id?c.to:c.from;
+        const otherCl=CLUSTERS.find(cl=>cl.id===other);
+        const dir=c.from===id?'→':'←';
+        return`<div class="d-conn" style="cursor:pointer" onclick="selectCluster('${other}')">
+          <div class="d-conn-dot" style="background:${c.color}"></div>
+          <div>
+            <div class="d-conn-name">${dir} ${otherCl.label}</div>
+            <div class="d-conn-text">${c.label} · ${c.desc}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+  panel.classList.add('open');
+}
+
+function closeDetail(){
+  document.getElementById('detail').classList.remove('open');
+}
+
+document.getElementById('detail-close').addEventListener('click',deselectAll);
+document.getElementById('detail-close-btn').addEventListener('click',deselectAll);
+
+// ═══════════════════════════════════════════════════════
+//  FILTER
+// ═══════════════════════════════════════════════════════
+document.getElementById('filter-pills').addEventListener('click',e=>{
+  const btn=e.target.closest('[data-filter]');
+  if(!btn)return;
+  activeFilter=btn.dataset.filter;
+  document.querySelectorAll('[data-filter]').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilter();
+});
+
+function applyFilter(){
+  CLUSTERS.forEach(cl=>{
+    const el=clusterEls[cl.id];
+    const nodes=el.querySelectorAll('.nd');
+    let visCount=0;
+    nodes.forEach(nd=>{
+      const rag=nd.dataset.rag,crit=nd.dataset.crit;
+      let show=true;
+      if(activeFilter==='green'&&rag!=='g')show=false;
+      if(activeFilter==='amber'&&rag!=='a')show=false;
+      if(activeFilter==='red'&&rag!=='r')show=false;
+      if(activeFilter==='mission'&&crit!=='mc')show=false;
+      nd.style.display=show?'':'none';
+      if(show)visCount++;
+    });
+    el.querySelector('.cl-ct').textContent=visCount+'/'+cl.nodes.length;
+    el.style.opacity=visCount===0?'0.3':'1';
+  });
+  setTimeout(()=>{redrawConnections();updateMinimap();},50);
+}
+
+// ═══════════════════════════════════════════════════════
+//  SEARCH
+// ═══════════════════════════════════════════════════════
+const searchEl=document.getElementById('search');
+const resultsEl=document.getElementById('search-results');
+
+searchEl.addEventListener('input',()=>{
+  const q=searchEl.value.toLowerCase().trim();
+  searchQuery=q;
+  if(!q){resultsEl.style.display='none';return;}
+  const hits=[];
+  CLUSTERS.forEach(cl=>{
+    if(cl.label.toLowerCase().includes(q))hits.push({type:'cluster',cl,name:cl.label,meta:cl.nodes.length+' systems'});
+    cl.nodes.forEach(n=>{
+      if(n.name.toLowerCase().includes(q)||n.meta.toLowerCase().includes(q)){
+        hits.push({type:'node',cl,name:n.name,meta:n.meta});
+      }
+    });
+  });
+  if(hits.length===0){resultsEl.style.display='none';return;}
+  resultsEl.innerHTML=hits.slice(0,8).map(h=>`
+    <div class="sr-item" data-cluster="${h.cl.id}">
+      <div class="sr-name">${h.name}</div>
+      <div class="sr-meta">${h.type==='cluster'?'Cluster':'In: '+h.cl.label} · ${h.meta}</div>
+    </div>`).join('');
+  resultsEl.style.display='block';
+});
+
+resultsEl.addEventListener('click',e=>{
+  const item=e.target.closest('.sr-item');
+  if(!item)return;
+  const id=item.dataset.cluster;
+  resultsEl.style.display='none';
+  searchEl.value='';
+  flyTo(id);
+  setTimeout(()=>selectCluster(id),400);
+});
+
+document.addEventListener('click',e=>{
+  if(!searchEl.contains(e.target)&&!resultsEl.contains(e.target))resultsEl.style.display='none';
+});
+
+function flyTo(id){
+  const el=clusterEls[id];
+  const x=parseFloat(el.style.left),y=parseFloat(el.style.top);
+  const w=el.offsetWidth||250,h=el.offsetHeight||200;
+  const vw=wrap.clientWidth,vh=wrap.clientHeight;
+  const cx=x+w/2,cy=y+h/2;
+  setTransform(vw/2-cx*scale,vh/2-cy*scale,scale);
+}
+
+// ═══════════════════════════════════════════════════════
+//  MINIMAP
+// ═══════════════════════════════════════════════════════
+const minimapCanvas=document.getElementById('minimap-canvas');
+const mmCtx=minimapCanvas.getContext('2d');
+const mmVp=document.getElementById('minimap-viewport');
+
+function updateMinimap(){
+  const mw=minimapCanvas.width,mh=minimapCanvas.height;
+  mmCtx.clearRect(0,0,mw,mh);
+
+  // find bounds
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  CLUSTERS.forEach(cl=>{
+    const el=clusterEls[cl.id];
+    const x=parseFloat(el.style.left),y=parseFloat(el.style.top);
+    const w=el.offsetWidth||250,h=el.offsetHeight||200;
+    minX=Math.min(minX,x);minY=Math.min(minY,y);
+    maxX=Math.max(maxX,x+w);maxY=Math.max(maxY,y+h);
+  });
+  const pad=40;
+  const bw=maxX-minX+pad*2,bh=maxY-minY+pad*2;
+  const s=Math.min(mw/bw,mh/bh);
+  const offX=(mw-bw*s)/2-minX*s+pad*s;
+  const offY=(mh-bh*s)/2-minY*s+pad*s;
+
+  // draw connections
+  CONNECTIONS.forEach(conn=>{
+    const a=getClusterCenter(conn.from),b=getClusterCenter(conn.to);
+    mmCtx.beginPath();
+    mmCtx.moveTo(a.x*s+offX,a.y*s+offY);
+    mmCtx.lineTo(b.x*s+offX,b.y*s+offY);
+    mmCtx.strokeStyle=conn.color==='#666'?'rgba(255,255,255,.1)':conn.color+'66';
+    mmCtx.lineWidth=1;
+    mmCtx.stroke();
+  });
+
+  // draw clusters
+  CLUSTERS.forEach(cl=>{
+    const el=clusterEls[cl.id];
+    const x=parseFloat(el.style.left),y=parseFloat(el.style.top);
+    const w=el.offsetWidth||250,h=el.offsetHeight||200;
+    mmCtx.fillStyle=cl.color+'33';
+    mmCtx.strokeStyle=cl.color+'99';
+    mmCtx.lineWidth=1;
+    mmCtx.beginPath();
+    mmCtx.roundRect(x*s+offX,y*s+offY,w*s,h*s,3);
+    mmCtx.fill();
+    mmCtx.stroke();
+  });
+
+  // viewport indicator
+  const vw=wrap.clientWidth,vh=wrap.clientHeight;
+  const vpX=(-tx/scale)*s+offX;
+  const vpY=(-ty/scale)*s+offY;
+  const vpW=(vw/scale)*s;
+  const vpH=(vh/scale)*s;
+  mmVp.style.left=Math.max(0,vpX)+'px';
+  mmVp.style.top=Math.max(0,vpY)+'px';
+  mmVp.style.width=vpW+'px';
+  mmVp.style.height=vpH+'px';
+}
+
+// ═══════════════════════════════════════════════════════
+//  TOOLBAR BUTTONS
+// ═══════════════════════════════════════════════════════
+document.getElementById('btn-zoomin').addEventListener('click',()=>{
+  const cx=wrap.clientWidth/2,cy=wrap.clientHeight/2;
+  const ns=Math.min(2,scale*1.2);
+  setTransform(cx-(cx-tx)*(ns/scale),cy-(cy-ty)*(ns/scale),ns);
+});
+document.getElementById('btn-zoomout').addEventListener('click',()=>{
+  const cx=wrap.clientWidth/2,cy=wrap.clientHeight/2;
+  const ns=Math.max(.2,scale/1.2);
+  setTransform(cx-(cx-tx)*(ns/scale),cy-(cy-ty)*(ns/scale),ns);
+});
+document.getElementById('btn-fit').addEventListener('click',fitAll);
+document.getElementById('btn-help').addEventListener('click',()=>document.getElementById('help').classList.add('open'));
+document.getElementById('help-close').addEventListener('click',()=>document.getElementById('help').classList.remove('open'));
+document.getElementById('help').addEventListener('click',e=>{if(e.target===document.getElementById('help'))e.target.classList.remove('open')});
+
+// ═══════════════════════════════════════════════════════
+//  KEYBOARD
+// ═══════════════════════════════════════════════════════
+document.addEventListener('keydown',e=>{
+  if(e.target===searchEl)return;
+  if(e.key==='Escape'){deselectAll();document.getElementById('help').classList.remove('open');}
+  if(e.key==='f'||e.key==='F')fitAll();
+  if(e.key==='+'||e.key==='=')document.getElementById('btn-zoomin').click();
+  if(e.key==='-')document.getElementById('btn-zoomout').click();
+  if(e.key==='/'){{e.preventDefault();searchEl.focus();}}
+});
+
+// ═══════════════════════════════════════════════════════
+//  AUTO LAYOUT — runs after render, uses actual sizes
+// ═══════════════════════════════════════════════════════
+
+function autoLayout(){
+  // Step 1: read actual rendered sizes
+  const sizes = {};
+  CLUSTERS.forEach(cl => {
+    const el = clusterEls[cl.id];
+    sizes[cl.id] = { w: el.offsetWidth || 260, h: el.offsetHeight || 300 };
+  });
+
+  // Step 2: place in a rough grid first — CRM in centre, others around it
+  // Sort by connection count (most connected = closest to centre)
+  const connCount = {};
+  CLUSTERS.forEach(cl => connCount[cl.id] = 0);
+  CONNECTIONS.forEach(c => { connCount[c.from]++; connCount[c.to]++; });
+
+  const GAP = 60; // minimum gap between clusters
+
+  // Place CRM at origin centre
+  const crmSize = sizes['crm'];
+  const positions = { crm: { x: 0, y: 0 } };
+
+  // Arrange others in a ring around CRM, evenly spaced by angle
+  const others = CLUSTERS.filter(c => c.id !== 'crm');
+  const ringR = 620; // radius of ring
+  others.forEach((cl, i) => {
+    const angle = (i / others.length) * Math.PI * 2 - Math.PI / 2;
+    positions[cl.id] = {
+      x: Math.cos(angle) * ringR - sizes[cl.id].w / 2,
+      y: Math.sin(angle) * ringR - sizes[cl.id].h / 2,
+    };
+  });
+
+  // Step 3: Force-directed separation — push overlapping clusters apart
+  const ITERATIONS = 200;
+  const ids = CLUSTERS.map(c => c.id);
+
+  for (let iter = 0; iter < ITERATIONS; iter++) {
+    const forces = {};
+    ids.forEach(id => forces[id] = { x: 0, y: 0 });
+
+    // Repulsion between every pair
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const a = ids[i], b = ids[j];
+        const pa = positions[a], pb = positions[b];
+        const sa = sizes[a], sb = sizes[b];
+
+        // Overlap check with padding
+        const overlapX = (pa.x + sa.w / 2) - (pb.x + sb.w / 2);
+        const overlapY = (pa.y + sa.h / 2) - (pb.y + sb.h / 2);
+        const minDistX = (sa.w + sb.w) / 2 + GAP;
+        const minDistY = (sa.h + sb.h) / 2 + GAP;
+
+        const penetX = minDistX - Math.abs(overlapX);
+        const penetY = minDistY - Math.abs(overlapY);
+
+        if (penetX > 0 && penetY > 0) {
+          // Overlapping — push apart along axis of least penetration
+          const strength = 0.5;
+          if (penetX < penetY) {
+            const push = penetX * strength * Math.sign(overlapX);
+            forces[a].x += push;
+            forces[b].x -= push;
+          } else {
+            const push = penetY * strength * Math.sign(overlapY);
+            forces[a].y += push;
+            forces[b].y -= push;
+          }
+        }
+      }
+    }
+
+    // Weak spring attraction toward ring positions (prevent drift)
+    const springStrength = 0.05;
+    const crmPos = positions['crm'];
+    ids.forEach(id => {
+      if (id === 'crm') return;
+      // Gentle pull back toward ring
+      forces[id].x -= positions[id].x * springStrength * 0.02;
+      forces[id].y -= positions[id].y * springStrength * 0.02;
+    });
+
+    // Apply forces
+    ids.forEach(id => {
+      positions[id].x += forces[id].x;
+      positions[id].y += forces[id].y;
+    });
+  }
+
+  // Step 4: Apply final positions to DOM elements
+  CLUSTERS.forEach(cl => {
+    const el = clusterEls[cl.id];
+    const pos = positions[cl.id];
+    el.style.left = Math.round(pos.x) + 'px';
+    el.style.top  = Math.round(pos.y) + 'px';
+    el.style.opacity = '1';
+    el.style.transition = 'opacity 0.4s ease';
+    // Update data for connector calc
+    cl.x = Math.round(pos.x);
+    cl.y = Math.round(pos.y);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+function init(){
+  // Hide clusters initially to avoid flash of stacked elements
+  CLUSTERS.forEach(cl => {
+    clusterEls[cl.id].style.opacity = '0';
+    clusterEls[cl.id].style.left = '0px';
+    clusterEls[cl.id].style.top = '0px';
+  });
+
+  // Wait two frames so browser has rendered and we have real offsetWidth/Height
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      autoLayout();
+      redrawConnections();
+      fitAll();
+      updateMinimap();
+      // Toast hint
+      const toast = document.getElementById('toast');
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3500);
+    });
+  });
+}
+
+// Observe resize
+const ro=new ResizeObserver(()=>{redrawConnections();updateMinimap();});
+ro.observe(wrap);
+
+init();
+</script>
+</body>
+</html>
