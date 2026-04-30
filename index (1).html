@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MS Society — Interactive Systems Map</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+:root{
+  --bg:#0a0a0a;--surface:#111;--s2:#181818;--s3:#1f1f1f;--s4:#262626;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--border3:rgba(255,255,255,0.22);
+  --text:#e2e0da;--muted:#666260;--faint:#1a1a1a;
+  --rag-g:#1D9E75;--rag-a:#EF9F27;--rag-r:#E24B4A;--rag-u:#555;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text)}
+
+/* TOPBAR */
+#topbar{position:fixed;top:0;left:0;right:0;height:52px;background:rgba(10,10,10,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:10px;padding:0 14px;z-index:100;flex-wrap:nowrap}
+#logo{font-size:13px;font-weight:600;white-space:nowrap;margin-right:2px}
+#logo span{color:#1D9E75}
+#search-wrap{position:relative;flex-shrink:0;width:200px}
+#search-wrap svg{position:absolute;left:8px;top:50%;transform:translateY(-50%);opacity:.4;pointer-events:none}
+#search{width:100%;background:var(--s2);border:1px solid var(--border2);border-radius:7px;padding:6px 10px 6px 28px;font-size:12px;font-family:'DM Sans',sans-serif;color:var(--text);outline:none}
+#search:focus{border-color:#1D9E75;background:var(--s3)}
+#search::placeholder{color:var(--muted)}
+
+/* filter sections */
+.tb-sep{width:1px;height:24px;background:var(--border2);flex-shrink:0}
+.tb-label{font-size:9px;font-family:'DM Mono',monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;flex-shrink:0}
+.pill-group{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;max-width:280px}
+.pill-group::-webkit-scrollbar{display:none}
+.tp{font-size:10px;font-family:'DM Mono',monospace;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:var(--s2);color:var(--muted);cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
+.tp:hover{border-color:var(--border3);color:var(--text)}
+.tp.on{border-color:var(--border3);color:var(--text);background:var(--s3)}
+.tp.rag-g.on{color:var(--rag-g);border-color:rgba(29,158,117,.5);background:rgba(29,158,117,.1)}
+.tp.rag-a.on{color:var(--rag-a);border-color:rgba(239,159,39,.5);background:rgba(239,159,39,.1)}
+.tp.rag-r.on{color:var(--rag-r);border-color:rgba(226,75,74,.5);background:rgba(226,75,74,.1)}
+.tp.rag-u.on{color:var(--rag-u);border-color:rgba(85,85,85,.5);background:rgba(85,85,85,.1)}
+.tp.crit-mc.on{color:#1D9E75;border-color:rgba(29,158,117,.5);background:rgba(29,158,117,.1)}
+.tp.crit-bc.on{color:#4A9FE8;border-color:rgba(74,159,232,.5);background:rgba(74,159,232,.1)}
+.tp.crit-imp.on{color:var(--muted);border-color:var(--border2);background:var(--s4)}
+.tp.crit-u.on{color:#888;border-color:rgba(136,136,136,.5);background:rgba(136,136,136,.1)}
+
+/* group toggle */
+.group-toggle{display:flex;gap:2px;flex-shrink:0}
+.gtb{font-size:10px;font-family:'DM Mono',monospace;padding:4px 10px;border:1px solid var(--border2);background:var(--s2);color:var(--muted);cursor:pointer;transition:all .15s;white-space:nowrap}
+.gtb:first-child{border-radius:5px 0 0 5px}
+.gtb:last-child{border-radius:0 5px 5px 0}
+.gtb.on{background:var(--s3);color:var(--text);border-color:var(--border3)}
+
+#tb-right{margin-left:auto;display:flex;gap:5px;align-items:center;flex-shrink:0}
+.icon-btn{width:28px;height:28px;border-radius:5px;border:1px solid var(--border2);background:var(--s2);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;font-size:13px;flex-shrink:0}
+.icon-btn:hover{border-color:var(--border3);color:var(--text)}
+#zoom-label{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);min-width:32px;text-align:center}
+
+/* CANVAS */
+#canvas-wrap{position:fixed;top:52px;left:0;right:0;bottom:0;overflow:hidden;cursor:grab;background:var(--bg);background-image:radial-gradient(circle,rgba(255,255,255,.02) 1px,transparent 1px);background-size:24px 24px}
+#canvas-wrap.grabbing{cursor:grabbing}
+#canvas{position:absolute;transform-origin:0 0;will-change:transform}
+#svg-layer{position:absolute;top:0;left:0;pointer-events:none;overflow:visible}
+.conn-path{fill:none;stroke-width:1.5;transition:opacity .2s,stroke-width .2s}
+.conn-path.dimmed{opacity:.05}
+.conn-path.highlighted{stroke-width:2.5;opacity:1}
+
+/* CLUSTERS */
+.cluster{position:absolute;border-radius:10px;border:1px solid;background:var(--s2);min-width:240px;max-width:280px;transition:box-shadow .2s,opacity .2s;cursor:pointer;user-select:none}
+.cluster:hover{box-shadow:0 0 0 2px rgba(255,255,255,.07)}
+.cluster.selected{box-shadow:0 0 0 2px rgba(255,255,255,.2)}
+.cluster.dimmed{opacity:.15}
+.cl-head{padding:8px 11px 7px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;border-radius:9px 9px 0 0}
+.cl-name{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;font-family:'DM Mono',monospace}
+.cl-count{font-size:9px;font-family:'DM Mono',monospace;color:var(--muted)}
+.cl-body{padding:6px;display:flex;flex-direction:column;gap:3px}
+
+/* NODES — now always visible */
+.nd{border-radius:5px;border:1px solid var(--border);padding:5px 7px;background:var(--s3);transition:border-color .15s}
+.nd:hover{border-color:var(--border2)}
+.nd.hidden{display:none}
+.nd.crm-linked{border-left:2px solid #1D9E75}
+.nd-name{font-size:11px;font-weight:500;color:var(--text);line-height:1.3}
+.nd-meta{font-size:9px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:1px}
+.nd-row{display:flex;align-items:center;gap:4px;margin-top:3px;flex-wrap:wrap}
+.rag{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.rag.g{background:var(--rag-g)}.rag.a{background:var(--rag-a)}.rag.r{background:var(--rag-r)}.rag.u{background:var(--rag-u)}
+.crit{font-size:8px;font-family:'DM Mono',monospace;padding:1px 4px;border-radius:3px;border:1px solid}
+.crit.mc{color:var(--rag-g);border-color:rgba(29,158,117,.3);background:rgba(29,158,117,.07)}
+.crit.bc{color:#4A9FE8;border-color:rgba(74,159,232,.3);background:rgba(74,159,232,.07)}
+.crit.imp{color:var(--muted);border-color:var(--border2);background:var(--faint)}
+.crit.u{color:#888;border-color:rgba(136,136,136,.3);background:rgba(100,100,100,.07)}
+.cost{font-size:8px;font-family:'DM Mono',monospace;color:var(--rag-a);margin-left:auto}
+.crm-tag{font-size:8px;font-family:'DM Mono',monospace;color:#1D9E75;background:rgba(29,158,117,.1);border:1px solid rgba(29,158,117,.3);border-radius:3px;padding:1px 4px}
+
+/* DETAIL PANEL */
+#detail{position:fixed;right:0;top:52px;bottom:0;width:340px;background:rgba(12,12,12,.97);backdrop-filter:blur(16px);border-left:1px solid var(--border2);transform:translateX(100%);transition:transform .25s cubic-bezier(.4,0,.2,1);z-index:90;overflow-y:auto}
+#detail.open{transform:translateX(0)}
+#detail-head{position:sticky;top:0;background:rgba(12,12,12,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:12px 14px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;z-index:1}
+#detail-title{font-size:13px;font-weight:600;line-height:1.3}
+#detail-subtitle{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px}
+#detail-close-btn{width:24px;height:24px;border-radius:5px;border:1px solid var(--border2);background:var(--s2);color:var(--muted);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;flex-shrink:0}
+#detail-body{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.d-sec{margin-bottom:2px}
+.d-sec-title{font-size:9px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:6px}
+.d-nd{border-radius:6px;border:1px solid var(--border);padding:7px 9px;background:var(--s3);margin-bottom:4px}
+.d-nd.crm-linked{border-left:2px solid #1D9E75}
+.d-nd-name{font-size:11px;font-weight:500;margin-bottom:2px}
+.d-nd-meta{font-size:9px;color:var(--muted);font-family:'DM Mono',monospace}
+.d-nd-row{display:flex;align-items:center;gap:4px;margin-top:4px;flex-wrap:wrap}
+.d-nd-desc{font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4}
+.d-nd-notes{font-size:10px;color:var(--muted);background:var(--faint);border-radius:4px;padding:5px 7px;margin-top:4px;line-height:1.4}
+.d-nd-crm{font-size:9px;font-family:'DM Mono',monospace;color:#1D9E75;margin-top:3px}
+.d-nd-int{font-size:9px;font-family:'DM Mono',monospace;color:var(--muted);margin-top:2px}
+.d-conn{border-radius:5px;border:1px solid var(--border);padding:6px 8px;background:var(--faint);margin-bottom:3px;cursor:pointer;transition:background .1s}
+.d-conn:hover{background:var(--s3)}
+.d-conn-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-right:4px}
+.d-conn-inner{display:flex;align-items:center}
+.d-conn-name{font-size:11px;font-weight:500}
+.d-conn-desc{font-size:9px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:1px}
+.d-stat{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px}
+.d-stat:last-child{border-bottom:none}
+.d-stat-label{color:var(--muted)}
+.d-stat-val{font-family:'DM Mono',monospace;font-size:10px}
+
+/* MINIMAP */
+#minimap{position:fixed;bottom:14px;right:14px;width:150px;height:90px;background:rgba(12,12,12,.85);backdrop-filter:blur(8px);border:1px solid var(--border2);border-radius:7px;overflow:hidden;z-index:90}
+#mm-canvas{width:100%;height:100%}
+#mm-vp{position:absolute;border:1px solid rgba(255,255,255,.3);border-radius:2px;pointer-events:none;background:rgba(255,255,255,.04)}
+
+/* SEARCH RESULTS */
+#search-results{position:fixed;top:54px;left:216px;width:260px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;overflow:hidden;z-index:150;display:none;box-shadow:0 8px 32px rgba(0,0,0,.5);max-height:320px;overflow-y:auto}
+.sr-item{padding:7px 11px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s}
+.sr-item:last-child{border-bottom:none}
+.sr-item:hover{background:var(--s3)}
+.sr-name{font-size:12px;font-weight:500}
+.sr-meta{font-size:9px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:1px}
+
+/* TOAST */
+#toast{position:fixed;bottom:14px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--s3);border:1px solid var(--border2);border-radius:7px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);transition:transform .3s;z-index:200;white-space:nowrap;pointer-events:none}
+#toast.show{transform:translateX(-50%) translateY(0)}
+
+/* HELP */
+#help{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:300;display:none;align-items:center;justify-content:center}
+#help.open{display:flex}
+#help-box{background:var(--s2);border:1px solid var(--border2);border-radius:12px;padding:22px;max-width:340px;width:90%}
+#help-box h2{font-size:14px;margin-bottom:12px}
+.hr{display:flex;gap:8px;margin-bottom:8px;font-size:12px;align-items:flex-start}
+.hk{font-family:'DM Mono',monospace;font-size:9px;padding:2px 6px;border-radius:4px;border:1px solid var(--border2);background:var(--s3);color:var(--text);white-space:nowrap;flex-shrink:0;margin-top:1px}
+.hd{color:var(--muted);line-height:1.5}
+#help-close{margin-top:14px;width:100%;padding:7px;border-radius:7px;border:1px solid var(--border2);background:var(--s3);color:var(--text);cursor:pointer;font-size:12px}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div id="logo">MS Society <span>Systems Map</span></div>
+
+  <div id="search-wrap">
+    <svg width="12" height="12" viewBox="0 0 13 13"><circle cx="5.5" cy="5.5" r="4" stroke="white" stroke-width="1.2" fill="none"/><line x1="8.5" y1="8.5" x2="12" y2="12" stroke="white" stroke-width="1.2" stroke-linecap="round"/></svg>
+    <input id="search" type="text" placeholder="Search systems…" autocomplete="off">
+  </div>
+  <div id="search-results"></div>
+
+  <div class="tb-sep"></div>
+  <span class="tb-label">Group by</span>
+  <div class="group-toggle">
+    <button class="gtb on" data-group="category">Category</button>
+    <button class="gtb" data-group="owner">Owner</button>
+  </div>
+
+  <div class="tb-sep"></div>
+  <span class="tb-label">RAG</span>
+  <div class="pill-group" id="rag-filters">
+    <button class="tp rag-g on" data-rag="Green">Green</button>
+    <button class="tp rag-a on" data-rag="Amber">Amber</button>
+    <button class="tp rag-r on" data-rag="Red">Red</button>
+    <button class="tp rag-u on" data-rag="Unknown">Unknown</button>
+  </div>
+
+  <div class="tb-sep"></div>
+  <span class="tb-label">Criticality</span>
+  <div class="pill-group" id="crit-filters">
+    <button class="tp crit-mc on" data-crit="Mission critical">Mission</button>
+    <button class="tp crit-bc on" data-crit="Business critical">Business</button>
+    <button class="tp crit-imp on" data-crit="Important but not critical">Important</button>
+    <button class="tp crit-u on" data-crit="Unknown">Unknown</button>
+  </div>
+
+  <div id="tb-right">
+    <span id="zoom-label">100%</span>
+    <button class="icon-btn" id="btn-zi" title="Zoom in">+</button>
+    <button class="icon-btn" id="btn-zo" title="Zoom out">−</button>
+    <button class="icon-btn" id="btn-fit" title="Fit to screen">⊡</button>
+    <button class="icon-btn" id="btn-help" title="Help">?</button>
+  </div>
+</div>
+
+<div id="canvas-wrap">
+  <div id="canvas">
+    <svg id="svg-layer"></svg>
+  </div>
+</div>
+
+<div id="detail">
+  <div id="detail-head">
+    <div>
+      <div id="detail-title">Select a cluster</div>
+      <div id="detail-subtitle"></div>
+    </div>
+    <div id="detail-close-btn">×</div>
+  </div>
+  <div id="detail-body"></div>
+</div>
+
+<div id="minimap"><canvas id="mm-canvas" width="300" height="180"></canvas><div id="mm-vp"></div></div>
+<div id="toast">Click a cluster to explore · Scroll to zoom · Drag to pan</div>
+<div id="help">
+  <div id="help-box">
+    <h2>Navigation & shortcuts</h2>
+    <div class="hr"><span class="hk">scroll</span><span class="hd">Zoom in/out</span></div>
+    <div class="hr"><span class="hk">drag</span><span class="hd">Pan the canvas</span></div>
+    <div class="hr"><span class="hk">click cluster</span><span class="hd">Select — highlights connections, opens detail panel with all systems expanded</span></div>
+    <div class="hr"><span class="hk">Esc</span><span class="hd">Deselect / close panel</span></div>
+    <div class="hr"><span class="hk">F</span><span class="hd">Fit all to screen</span></div>
+    <div class="hr"><span class="hk">+  −</span><span class="hd">Zoom in / out</span></div>
+    <div class="hr"><span class="hk">/</span><span class="hd">Focus search</span></div>
+    <div class="hr"><span class="hk">Group toggle</span><span class="hd">Switch between grouping by Category or Owner team</span></div>
+    <div class="hr"><span class="hk">RAG / Criticality</span><span class="hd">Toggle filters — click to include/exclude. Green tint on node = CRM integration</span></div>
+    <button id="help-close">Close</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  DATA
+// ═══════════════════════════════════════════════════
+const RAW = [{"name":"Acquia","category":"Website and content management","owner":"Engagement","criticality":"Mission critical","rag":"Green","crm_integration":"","other_integrations":"Drupal\nSearchStax\nCloudflare","integration_context":"Cloud hosting\nSolr environnments\nDomain WAF rules pointing to Acquia","cost":"\u00a327,800","description":"Various cloud services, we use to host our Drupal websites","notes":"","tech_type":"Cloud platform server hosting for web and database","audience":"Internal tool"},{"name":"Adobe creative cloud","category":"Website and content management","owner":"Engagement","criticality":"Business critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"Suite of professional creative software and services from Adobe that includes tools for design, photography, video, web, and animation.","notes":"Weakness:\n- Usual MS Society laptops are not powerful enough to support these systems. People have to use their own macs.","tech_type":"Digital and Content","audience":"Internal tool"},{"name":"Ahrefs","category":"Analytics and UX","owner":"Engagement","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"SEO software platform that helps marketers analyze backlinks, keywords, competitors, and website performance to improve search engine rankings","notes":"Note: It's run by TB so we don't know the full scope of what it has to offer","tech_type":"SaaS","audience":"Internal tool"},{"name":"Alchemer","category":"Analytics and UX","owner":"Strategy & Data","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"An online survey and feedback platform for collecting and analysing user data.","notes":"","tech_type":"Engagement tool","audience":"Customer facing"},{"name":"Amazon for podcasters","category":"Digital engagement","owner":"Engagement","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"A platform for distributing, monetising, and analysing podcasts through Amazon and Audible ecosystems.","notes":"Low traffic on these platforms","tech_type":"Engagement tool","audience":"Customer facing"},{"name":"Apple Podcasts","category":"Digital engagement","owner":"Engagement","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"Audio streaming service and media player app, we use to host our Podcasts on Apple Music","notes":"Low traffic on these platforms","tech_type":"Engagement tool","audience":"Customer facing"},{"name":"Assemble","category":"CRM and supporter data","owner":"Volunteering","criticality":"Mission critical","rag":"Amber","crm_integration":"Yes push and pull","other_integrations":"Sage\nNear Me (Website)","integration_context":"API with SAGE two way\nNear Me  - JSON file from Dynamics","cost":"Graham to confirm","description":"Volunteer management system","notes":"Strengths: \nUser intuitive, market leading tried and trusted volunteer management system owned by the Access Group.\nUpdates and bug fixes are regularly deployed and new features developed as part of the Assemble roadmap. \nCloud-based system which works on most web browsers. \nMajority of technical issues can be quickly resolved in-house.\n\nWeaknesses","tech_type":"Vol Management System","audience":"Internal tool"},{"name":"Auth0","category":"Website and content management","owner":"Engagement","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"Drupal\nDiscourse","integration_context":"Pushes data to Drupal/Discourse","cost":"\u00a32,400.00","description":"Auth0 (by Okta) is a flexible, cloud-based Identity-as-a-Service (IDaaS) platform that provides authentication and authorization services for applications and APIs. It allows developers to quickly implement secure login systems, s Single Sign-on (SSO","notes":"Not sure it is serving the purpose it was intended for as For you has not been developed. Auth0 makes Forum sign up journey weird. We no longer have a Drupal module for Auth0 so need custom code to use Auth0 on the website.","tech_type":"IDaaS","audience":"both"},{"name":"Power BI","category":"Data and insight","owner":"Strategy & Data","criticality":"Important but not critical","rag":"Red","crm_integration":"Yes pull","other_integrations":"","integration_context":"","cost":"TBC","description":"Power BI is Microsoft\u2019s unified business intelligence platform that connects, cleans, and transforms raw data from various sources (like Excel, SQL, cloud services) into interactive, visual dashboards and reports.","notes":"Weakness:\n- Information about the platform is scattered internally *\n- Not being used actively","tech_type":"Reporting tool","audience":"Internal tool"},{"name":"Azure","category":"Services and support systems","owner":"InfoSystems","criticality":"Mission critical","rag":"Green","crm_integration":"Yes push and pull","other_integrations":"Dynamics 365","integration_context":"Underlying hosting for CRM.","cost":"TBC","description":"Microsoft's native hosting platform","notes":"Strength:\n- Industry leader. 'Bullet proof'\n- Flexibility in processing for cost management\n\nWeakness:\n- Information about the platform is scattered internally *","tech_type":"Hosting","audience":"Internal tool"},{"name":"BitBucket (Atlassian)","category":"Website and content management","owner":"Engagement","criticality":"Business critical","rag":"Green","crm_integration":"","other_integrations":"Acquia\nDrupal","integration_context":"Deployment of code","cost":"\u00a30","description":"Atlassian Git-based code hosting and collaboration platform designed for software teams to plan, code, test, and deploy projects.","notes":"","tech_type":"Code repositary and deployment pipeline","audience":"Internal tool"},{"name":"Bitly","category":"Social media","owner":"Engagement","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"A URL shortening and link tracking service.","notes":"Alternative systems available","tech_type":"Engagement tool","audience":"Internal tool"},{"name":"Bluesky","category":"Social media","owner":"Engagement","criticality":"Business critical","rag":"Amber","crm_integration":"","other_integrations":"SproutSocial","integration_context":"","cost":"\u00a30","description":"Micro blogging, social media platform.","notes":"Not actively used at the moment but will be in future.","tech_type":"Social media channel","audience":"Internal tool"},{"name":"Call handling","category":"Services and support systems","owner":"Services","criticality":"Mission critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"Help Hub and customer services team tool. Inbound and outbound calls","notes":"Does what we need to do, there are opt opps but fine as is","tech_type":"Virtual call centre","audience":"Internal tool"},{"name":"Canva","category":"Services and support systems","owner":"Engagement","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"No","integration_context":"We use a free/charity account with limited users, other people may use their own accounts and reuse brand assets provided from the main account","cost":"\u00a30","description":"Free-to-use online graphic design tool","notes":"Weaknesses:\n- Limited user account and assets spread across accounts","tech_type":"Design","audience":"Internal tool"},{"name":"Charity Car","category":"Fundraising and events","owner":"Partnerships","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"CharityCar enables people to donate unwanted cars, arranging collection or recycling, and converting their value into charitable donations while handling logistics and administration.","notes":"Stengths:\n- Low effort but still a source of income.\nWeakness:\n- Outdated platfomr","tech_type":"App based","audience":"Customer facing"},{"name":"Charity Tracker (Formerly Eden Stanley Charity Tracker)","category":"Data and insight","owner":"Engagement","criticality":"Business critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a324,973.63","description":"Charity brand tracking and intelligence","notes":"Weaknesses:\n- It is not clear on the breadth of representation of the data source \nThey survey x% of population - but their pools aren't huge","tech_type":"Analysis and Reporting","audience":"Internal tool"},{"name":"Cloudflare","category":"Website and content management","owner":"Engagement","criticality":"Mission critical","rag":"Green","crm_integration":"","other_integrations":"Acquia","integration_context":"Domain WAF rules","cost":"\u00a33120","description":"Cloudflare is global cloud platform that acts as a secure, fast intermediary between a user and a website's serve. We use it as a Web Application Firewall (WAF)and SSL certificates for mssociety.org.uk websites","notes":"","tech_type":"WAF and SSL","audience":"Internal technology"},{"name":"Confluence (Atlassian)","category":"Website and content management","owner":"Engagement","criticality":"Unknown","rag":"Unknown","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a31501","description":"A collaboration and documentation platform for teams.","notes":"","tech_type":"Project Management","audience":"Internal tool"},{"name":"ControlCase","category":"Internal","owner":"Engagement","criticality":"Business critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a3990","description":"ControlCase is a global provider of certification, cybersecurity, and continuous compliance services.","notes":"Strengths: \n- Provides ongoing compliance scanning on a quarterly basis to ensure our pages aren't taken down by EN. \n\nWeaknesses: \n- No notifications to remind that a scan is due or complete.","tech_type":"Compliance scanner","audience":"Internal tool"},{"name":"Cookiebot","category":"Digital engagement","owner":"Engagement","criticality":"Business critical","rag":"Green","crm_integration":"","other_integrations":"Google Tag Manager","integration_context":"CookieBot is implemented across sites using Google Tag Manager to implement","cost":"\u00a31944","description":"A consent management platform for cookies and online tracking compliance.","notes":"","tech_type":"SaaS","audience":"Customer facing"},{"name":"DAMS (ResourceSpace)","category":"Internal","owner":"Engagement","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a38,611.20","description":"Digital Asset Management System, all our images, videos, stories with relevant consent and Brand assets and MS Matters in one place","notes":"Weaknesses:\n- We need to clear up the users accounts and delete old ones.\n- Use of the system needs to be worked on via headcount/training/maintenance.","tech_type":"Digital asset management system","audience":"Internal tool"},{"name":"Discourse","category":"Services and support systems","owner":"Engagement","criticality":"Mission critical","rag":"Green","crm_integration":"","other_integrations":"Auth0\nSendgrid","integration_context":"Auth0 and Sendgrid used to manage log in and account creation","cost":"TBC","description":"SaaS community platform for our forum","notes":"Strengths: \n- All encompassing platform, with a variety of available data reports.\nWeakness: \n- Maybe too much data available\n- Tech for mobile is unknown / needs reviewing","tech_type":"SaaS","audience":"both"},{"name":"DNS Made Easy","category":"Services and support systems","owner":"Engagement","criticality":"Mission critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a31000","description":"A managed DNS hosting service.","notes":"","tech_type":"SaaS","audience":"Internal tool"},{"name":"DotDigital","category":"Email marketing","owner":"Engagement","criticality":"Business critical","rag":"Green","crm_integration":"Yes push and pull","other_integrations":"Meta Lead Centre","integration_context":"Push/pull data into CRM\nPull data from Meta","cost":"\u00a326,052","description":"Dotdigital is a customer experience and data platform that helps marketers deliver personalised, AI-powered campaigns across email, SMS, WhatsApp, social, and more \u2014 trusted by over 4,000 brands worldwide.","notes":"","tech_type":"Saas","audience":"Internal facing \nEnabling technology"},{"name":"Drupal (mssociety.org.uk)","category":"Website and content management","owner":"Engagement","criticality":"Mission critical","rag":"Green","crm_integration":"","other_integrations":"Auth0\nSendgrid\nGoogle location/geocode API\nSearchStax\nAcquia\nDrupal Smart content","integration_context":"APIs\nSolr environments\nCloud hosting\nDrupal modules","cost":"\u00a324,480","description":"Drupal isa powerful, open-source content management system (CMS) and framework used to build complex, secure, and highly customized websites and digital applications. This system provides an easier method for content editors to create and curate cont","notes":"Strengths: \n- Open source platform means support is available globally from the Drupal community","tech_type":"CMS","audience":"Customer facing"},{"name":"Drupal (volunteers.mssociety.org.uk)","category":"Website and content management","owner":"Volunteering","criticality":"Important but not critical","rag":"Red","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"This instance of Drupal is used to host the volunteer website. News, events, documents and processes needed for being a volunteer","notes":"Volweb is using Drupal 7 and so is on an unsupported Drupal instance. We use Tag1 who send us and Tom Dearden updates to module patches, but these are few and far between leading us to question the value. Drupal 7 has been unsupported for years and Digital and Content have identified the risk at various junctures, with resistance to following the a","tech_type":"CMS","audience":"Customer facing"},{"name":"Dynamics","category":"CRM and supporter data","owner":"InfoSystems","criticality":"Mission critical","rag":"Amber","crm_integration":"Yes push and pull","other_integrations":"JustGiving\nEngaging Networks\nKingsway Soft\nMicrosoft Office\nEventbrite\nDotDigital\nAccessPay\nFastStats\nPowerBi\nMicrosoft Azure\nDrupal (Near me)","integration_context":"Huge array of integrations pushing and pulling data","cost":"TBC","description":"Microsoft\u2019s suite of business applications for CRM and ERP.","notes":"Weakness:\n- Information about the platform is scattered internally *\n- Technical documentation is weak","tech_type":"CRM","audience":"Internal tool"},{"name":"Easyfundraising","category":"Fundraising and events","owner":"Partnerships","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"Company that works with other companies to donate a % of retail purchases to charity","notes":"Strengths\u2026\n- Easy fundraising, low effort, no associated cost to donor.\n\nWeakeness:\n- Can't contact the donors to nurture relationship\n- Compared to other platform, dashboards aren't as good","tech_type":"App based","audience":"Customer facing"},{"name":"Elucidat","category":"Services and support systems","owner":"Volunteering","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"Pull and publih into LSM","integration_context":"","cost":"TBC","description":"An e-learning authoring platform for creating online training content.","notes":"Very expensive. Can we do this via a different platform. LSM can dev e-learning to bring courses over. \nLSM integrated from Sage. Pull courses to Assemble (no integration between this)","tech_type":"LMS","audience":"both"},{"name":"Engaging Networks","category":"Digital engagement","owner":"Engagement","criticality":"Mission critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"Stripe \nLoqate","integration_context":"Stripe for payment processing. Loqate for address and bank account validation.","cost":"\u00a330,000","description":"Engaging Networks is a cloud-based digital engagement platform designed specifically for nonprofit organizations, managing donations, campaigning, email marketing and  more.","notes":"Strengths: \n- All encompassing platform, with a variety of available functions, such as donation handling, event sign ups, campaigning etc. \n- Ongoing roadmap of new products and product upgrades regularly released\n- Good support team for EN specific functionality\n- Data, secuurity compliant platform\nWeakness: \n- Needs custom development on top to ","tech_type":"SaaS","audience":"Customer facing"},{"name":"Enthuse","category":"Fundraising and events","owner":"CEvents","criticality":"Mission critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"","integration_context":"Transactions go to Dynamics","cost":"\u00a31271.99","description":"Donation platform specifically to donate to a particular group, e.g https://msgroups.enthuse.com/aberdeengroup/profile. Also manages London Marathon donations. More info here: ttps://volunteers.mssociety.org.uk/news/2022/09/introducing-enthuse-fundra","notes":"Weakness: \nLots of charities don't really like Enthuse, but it's forced because of the London Marathon link. Data from it is not as good as Just Giving. Harder to get the information you need","tech_type":"Fundraising/Donation platform","audience":"both"},{"name":"Eventbrite","category":"Fundraising and events","owner":"CEvents","criticality":"Mission critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"","integration_context":"Pushes sign up data into Dynamics CRM","cost":"TBC","description":"An event management and ticketing platform.","notes":"Weaknesses:\nData on sign ups would be useful time of day, drop offs etc\nNo team functionality\nNo fundraising integration\nStruggles with more complicated ticketing \nGaps in data\nLack of consistency on mandatory fields\nStrengths: \nBrand recognition \nWorks well for basic event registration\nHas internal tracking links - special events use in.","tech_type":"SaaS","audience":"both"},{"name":"Facebook","category":"Social media","owner":"Engagement","criticality":"Mission critical","rag":"Green","crm_integration":"","other_integrations":"Dot Digital\nPixel on mssociety.org.uk","integration_context":"Lead gen work providing Dot Digital with user data","cost":"\u00a30","description":"Meta owned social networking platform for connecting and sharing content.  Facebook Ads for targeted marketing, both paid and organic.\n\nLeague generation\nWe also took donations through Meta for the Spring Appeal","notes":"Strengths\n- High traffic/engagement\nWeakness\n- We need to diversify we're dependent on Meta\n- donation attribution on meta as all lumped together as PayPal","tech_type":"Social media channel\nDigital Marketing","audience":"Customer facing"},{"name":"Faststats","category":"Analytics and UX","owner":"Strategy & Data","criticality":"Business critical","rag":"Red","crm_integration":"Yes push and pull","other_integrations":"Check with Adam","integration_context":"","cost":"TBC","description":"Faststats is a data analysis and segmentation/selection tool","notes":"Weakness:","tech_type":"Analysis and Reporting","audience":"Internal tool"},{"name":"Figma","category":"Analytics and UX","owner":"Engagement","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a3840","description":"UX software","notes":"- Information about the platform is scattered internally *","tech_type":"Design tool","audience":"Internal tool"},{"name":"Firstclass","category":"Fundraising and events","owner":"IGLegacies","criticality":"Mission critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"4646.4","description":"A specialised, UK-based system for charities and non-profits to manage legacy income, wills, and bequests.","notes":"Strength - Industry leader - there is no other system that covers this work and it's critical to our management of Legacy income","tech_type":"Legacy management software","audience":"Internal tool"},{"name":"Flickr","category":"Fundraising and events","owner":"CEvents","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"Flickr is an image and video hosting platform where photographers share, organize, and discover photos, build communities, and store high-resolution images online.","notes":"Strengths:\nEasy to use","tech_type":"Social Media Platform","audience":"Customer facing"},{"name":"Funraisin","category":"Fundraising and events","owner":"CEvents","criticality":"Business critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"https://www.themay50k.co.uk/\nGoogle Analytics\nTag Manager","integration_context":"manual import\n(might be Kingsway soft)","cost":"\u00a3850","description":"Fundraisin is a digital fundraising platform enabling nonprofits to create campaigns, accept donations, engage supporters, and manage events efficiently online.","notes":"Tied to using this, we don't have a choice due to partnership with MSIF, if we want to use another then we'd not take part","tech_type":"Fundraising/Donation platform\nMicrosites","audience":"Customer facing"},{"name":"Github","category":"Website and content management","owner":"Engagement","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"Code hosted","integration_context":"Code is hosted on GitHub and used by websites","cost":"\u00a3178","description":"A code hosting platform for version control and collaboration.","notes":"","tech_type":"Code repositary","audience":"Internal tool"},{"name":"Give as you live (everyclick ltd)","category":"Fundraising and events","owner":"Partnerships","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"Give as you Live (formerly Everyclick) is a UK platform where everyday shopping raises free donations for chosen charities at no extra cost.","notes":"","tech_type":"App based","audience":"Customer facing"},{"name":"Giveacar","category":"Fundraising and events","owner":"Partnerships","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"Giveacar enables people to donate unwanted vehicles, arranging collection or auction, then converting proceeds into charitable donations while handling paperwork and recycling responsibly.","notes":"","tech_type":"App based","audience":"Customer facing"},{"name":"GivePanel","category":"Fundraising and events","owner":"CEvents","criticality":"Mission critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"Meta\nPotentially LinkedIn\nJustGiving","integration_context":"","cost":"TBC","description":"A platform connecting into JustGiving and Meta Leads, which can facilitate email marketing","notes":"Strength:\nUnique processing of donation data from Meta, which is why we've classed this as Mission Crit.\nWeakness:\nWould like to move over to DotDigital as not providing what we need data wise","tech_type":"SaaS","audience":"both"},{"name":"Givery","category":"Fundraising and events","owner":"Philanthropy","criticality":"Unknown","rag":"Unknown","crm_integration":"","other_integrations":"","integration_context":"","cost":"","description":"Givery is a platform enabling charitable donations through everyday shopping, cashback rewards, and brand partnerships, helping users support causes effortlessly.","notes":"","tech_type":"Donation platform","audience":"Customer facing"},{"name":"GoDaddy","category":"Website and content management","owner":"Engagement","criticality":"Mission critical","rag":"Amber","crm_integration":"","other_integrations":"Cloudflare\nDNS Made Easy","integration_context":"Pass reg info to CF and DME","cost":"\u00a350","description":"Domain name registration","notes":"we could probably get rid of some of the legacy domains, but keep so we can control what they point to for reputational risk, or SEO in the case of of cakebreak.org.uk","tech_type":"Domain registration","audience":"Internal tool"},{"name":"Google Adwords","category":"Digital engagement","owner":"Engagement","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"Google Analytics\nSearch Console","integration_context":"","cost":"TBC","description":"Google\u2019s online advertising platform, now called Google Ads. Both organic and paid ads.","notes":"","tech_type":"Digital marketing","audience":"both"},{"name":"Google Analytics","category":"Analytics and UX","owner":"Strategy & Data","criticality":"Business critical","rag":"Green","crm_integration":"Yes push","other_integrations":"Tracked links push data into Dynamics","integration_context":"Not automatically integrated. Part of a manual import process","cost":"\u00a30","description":"Web analytics platform that tracks and reports website and app traffic, providing insights into user behavior, traffic sources, and conversion goals","notes":"Sam is the process of auditing and improving our data. Not currently recording YouTube data","tech_type":"Analytics tool","audience":"Internal tool"},{"name":"Google Cloud","category":"Unknown","owner":"Unknown","criticality":"Unknown","rag":"Unknown","crm_integration":"","other_integrations":"","integration_context":"","cost":"","description":"","notes":"","tech_type":"","audience":""},{"name":"Google location/geocode API","category":"Website and content management","owner":"Engagement","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"SearchStax\nDrupal","integration_context":"SearchStax and Drupal uses location data to display results","cost":"\u00a30","description":"APIs for location search using Google Maps","notes":"","tech_type":"GPS","audience":"both"},{"name":"Google Search console","category":"Data and insight","owner":"Engagement","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"Google Analytics\nLooker Data Studio","integration_context":"","cost":"\u00a30","description":"Google\u2019s tool that helps website owners monitor, maintain, and improve their site\u2019s visibility and performance in Google Search.","notes":"Strength: Unique, large data set\nWeakesses: Limited to what we're given","tech_type":"","audience":"Internal tool"},{"name":"Google Tag Manager","category":"Analytics and UX","owner":"Strategy & Data","criticality":"Business critical","rag":"Green","crm_integration":"","other_integrations":"Cookiebot \nPersonalisation\nDot Digital (Webchat)\nMeta pixel\nX pixel","integration_context":"Tags containing marketing pixels, cookie prerences and code set run on page load on various public facing platforms","cost":"\u00a30","description":"Web-based tag management system (TMS) that allows marketers and analysts to add, edit, and manage tracking pixels, scripts, and marketing tags (e.g., Google Analytics, Facebook Pixels) on websites or mobile apps without editing the code directly..","notes":"","tech_type":"Tag management system","audience":"Internal tool"},{"name":"Hotjar","category":"Analytics and UX","owner":"Engagement","criticality":"Important but not critical","rag":"Red","crm_integration":"","other_integrations":"","integration_context":"fires on these websites","cost":"\u00a32323","description":"Website heatmaps and behaviour analytics","notes":"Will be replaced with MS Clarity soon","tech_type":"Heat mapping","audience":"Internal tool"},{"name":"I want my name","category":"Internal","owner":"Engagement","criticality":"Important but not critical","rag":"Unknown","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a315","description":"Domain registration of mssoc.org.uk","notes":"","tech_type":"Domain registration","audience":"Internal tool"},{"name":"Instagram","category":"Social media","owner":"Engagement","criticality":"Mission critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"A social media platform for sharing photos and videos.","notes":"wide audience reach\nweakness: Meta controlled","tech_type":"Social Media Platform","audience":"Customer facing"},{"name":"Just Giving","category":"Fundraising and events","owner":"CEvents","criticality":"Mission critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"GA4\nTag Manager","integration_context":"","cost":"\u00a30","description":"An online peer to peer fundraising platform","notes":"Stregnth:\n- Industry leader for fundraising.\nWeaknesses:\n- Not all our products are integrated into this and the customer jounreys aren't great.","tech_type":"Fundraising/Donation platform\nMicrosites","audience":"Customer facing"},{"name":"Leftover currency (the platform not the product)","category":"Fundraising and events","owner":"IGLegacies","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"Donation platform enabling suppoters to donate leftover currency to MS Society. We have our own page on their website:\nhttps://www.leftovercurrency.com/charity/ms-society/","notes":"","tech_type":"Donation platform","audience":"Customer facing"},{"name":"LinkedIn","category":"Social media","owner":"Engagement","criticality":"Business critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"A professional networking and career development platform.","notes":"Good for professional engagement","tech_type":"Social media Platform\nDigital Marketing","audience":"Customer facing"},{"name":"Linktree","category":"Social media","owner":"Engagement","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"A tool that creates a single landing page linking to multiple destinations.","notes":"","tech_type":"Social media referencing landing page tool","audience":"Customer facing"},{"name":"Looker Studio","category":"Analytics and UX","owner":"Strategy & Data","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"Not integration, pulls data from sources","cost":"\u00a30","description":"Used to create our Google Analytics dashboards","notes":"","tech_type":"SaaS","audience":"Internal tool"},{"name":"Meta Business Manager","category":"Digital engagement","owner":"Engagement","criticality":"Mission critical","rag":"Green","crm_integration":"","other_integrations":"Sprout social\nInstagram\nFacebook\nDotDigital","integration_context":"","cost":"\u00a30","description":"A central platform for businesses to manage Facebook and Instagram assets, including ad accounts, pages, people, and advertising activity, in one place.","notes":"High % of paid ads are run here.","tech_type":"Social Media Management Platform","audience":"Internal tool"},{"name":"Microsoft Ads","category":"Digital engagement","owner":"Engagement","criticality":"Business critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"No integrations","cost":"\u00a36000","description":"Microsoft\u2019s online advertising platform for search and display ads.","notes":"Data governance documentation being missing makes this an amber. This has been used for over a decade and could do with a review","tech_type":"Engagement tool","audience":"Customer facing"},{"name":"Miro","category":"Services and support systems","owner":"Engagement","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a3550","description":"A collaborative online whiteboard platform that enables teams to brainstorm, plan, map journeys, and visually design ideas together in real time.","notes":"Stengths:\nFlexible and easy to use\nWeaknesses:\nWe share accounts to keep the cost down\nDon't know for sure there's no PII stored in here, depends what people use it for","tech_type":"Presentation tool","audience":"both"},{"name":"Muchloved  (the platform not the product)","category":"Fundraising and events","owner":"IGLegacies","criticality":"Mission critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"","integration_context":"","cost":"\u00a32160","description":"Enables the in memory product - hosting the individual landing pages.Collects in memory donations. Similar to JustGiving for in memory. Usually set up by funeral directors","notes":"Strength: \nHas functionality of JustGiving but is done sensitively as they're tributes/in memory donations. \n\nWide array of reporting available\n\nWeakness: \n\nFree package has lots of less  engaging functionality","tech_type":"Fundraising platform","audience":"both"},{"name":"Nextdoor","category":"Digital engagement","owner":"Engagement","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"pixel on website","cost":"\u00a30","description":"Local social networking platform we market through","notes":"No using at the moment, no plans to use it yet due to resource","tech_type":"Social networking platform\nDigital marketing","audience":"Customer facing"},{"name":"NOPCommerce","category":"Services and support systems","owner":"CustomerServices","criticality":"Important but not critical","rag":"Unknown","crm_integration":"","other_integrations":"fullfillment house?","integration_context":"","cost":"TBC","description":"Platform for the Online Shop","notes":"","tech_type":"Ecommerce","audience":"Customer facing"},{"name":"OneTrust","category":"Services and support systems","owner":"InfoSystems","criticality":"Business critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"A privacy, consent, and compliance management platform.\nDPIA, ROPA, RTF, Data incident logging","notes":"Strengths:\n- Alot of potential\n- Reporting functions\n- New modules released (third party risk assessment)\n\nWeakness:\n- No support available, all selfservice\n- Guidance not user friendly","tech_type":"Data compliance SaaS","audience":"Internal tool"},{"name":"Online research grants","category":"Services and support systems","owner":"Research_policy","criticality":"Unknown","rag":"Unknown","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"Researchers can use this platform to apply for grants for their workand follow their application","notes":"","tech_type":"Grant tracker","audience":"Customer facing"},{"name":"Paypal","category":"Fundraising and events","owner":"IGLegacies","criticality":"Business critical","rag":"Green","crm_integration":"Yes push","other_integrations":"Engaging Networks\nMay50k\nJustGiving","integration_context":"Pushes payment data into CRM","cost":"TBC","description":"An online payment and money transfer service.","notes":"Strengths:\nStrong global brand trust and buyer confidence\nHigh security and regulatory compliance\nEasy setup with no monthly fees\n\nWeaknesses:\nHigher transaction fees than many competitors\nAdditional costs for international payments and currency conversion\nCan be used for credit card fruad checks (malicious actors using it to check if credit cards ","tech_type":"Fintech","audience":"Internal tool"},{"name":"Payroll Giving (the platform not the product)","category":"Fundraising and events","owner":"IGLegacies","criticality":"Mission critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"Kingsway Soft","integration_context":"Data isn't integrated via an API, it is received as a report via suppliers and then pushed into CRM via Kingsway Soft import","cost":"\u00a30","description":"Platform where donors can apply to give money from their salary","notes":"Weakness:\nWe don't think anyone is filling in the downloable form (not really a weakness just a note). They use online form","tech_type":"Donation platform","audience":"Customer facing"},{"name":"Pintrest","category":"Social media","owner":"Engagement","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"Sprout social","integration_context":"","cost":"\u00a30","description":"A visual discovery and bookmarking platform.","notes":"Strengths:\nVisual discovery & intent-driven use\nLong content lifespan\nConsidered 'less toxic' when compared against competitors\nDiversifies away from Meta products\n\nWeaknesses:\nLower engagement intensity compared to comeptitors\nLimited customisation & control\nNiche audience fit","tech_type":"Social Media Platform","audience":"Customer facing"},{"name":"Pixlr","category":"Website and content management","owner":"Engagement","criticality":"Unknown","rag":"Unknown","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"Similar to photoshop, online photo editing tool","notes":"","tech_type":"","audience":"Internal tool"},{"name":"Power My Analytics","category":"Unknown","owner":"Unknown","criticality":"Unknown","rag":"Unknown","crm_integration":"","other_integrations":"","integration_context":"","cost":"","description":"","notes":"","tech_type":"","audience":""},{"name":"Recycle4Charity","category":"Fundraising and events","owner":"Partnerships","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"Recycle4Charity collects used ink cartridges and phones, recycles them responsibly, and converts their value into donations for charities chosen by individuals, schools, and organizations.","notes":"","tech_type":"App based","audience":"Customer facing"},{"name":"Recycling for good causes","category":"Fundraising and events","owner":"Partnerships","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"Used to recycle items such as phones, converting them into donations","notes":"","tech_type":"App based","audience":"Customer facing"},{"name":"Screaming frog","category":"Analytics and UX","owner":"Engagement","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"An SEO website crawling and auditing tool.","notes":"","tech_type":"Website crawler","audience":"Internal tool"},{"name":"SearchStax","category":"Website and content management","owner":"Engagement","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"Drupal\nAcquia","integration_context":"","cost":"\u00a30","description":"SearchStax is a managed, cloud\u2011native search platform that simplifies deploying, scaling, and optimizing Apache Solr\u2011based search for enterprise websites and applications, particularly those built on CMS platforms.","notes":"","tech_type":"(Search)aaS","audience":"both"},{"name":"SendGrid","category":"Email marketing","owner":"Engagement","criticality":"Business critical","rag":"Green","crm_integration":"","other_integrations":"Auth0\nDrupal","integration_context":"Pulls data from Auth0\nPulls data from Drupal","cost":"\u00a3802","description":"SendGrid is a cloud-based email delivery platform that lets developers and businesses send transactional and marketing emails reliably via API or SMTP.","notes":"","tech_type":"SaaS","audience":"Internal tool"},{"name":"Shotcut","category":"Digital engagement","owner":"Engagement","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"Shotcut is a free, open source, cross-platform video editor","notes":"Works on MSS laptops (mostly)","tech_type":"SaaS","audience":"Internal tool"},{"name":"Shutterstock","category":"Website and content management","owner":"Engagement","criticality":"Important but not critical","rag":"Unknown","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"A stock content marketplace for images, video, and music.","notes":"","tech_type":"Content Hosting Platform","audience":"Internal tool"},{"name":"Soundcloud","category":"Digital engagement","owner":"Engagement","criticality":"Important but not critical","rag":"Red","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"An audio distribution and music streaming platform.","notes":"","tech_type":"Streaming platform","audience":"Customer facing"},{"name":"Spotify","category":"Digital engagement","owner":"Engagement","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"Apple Podcast\nAmazon Podcast","integration_context":"","cost":"\u00a30","description":"A digital music and podcast streaming service. Used to host our podcasts","notes":"","tech_type":"Streaming platform","audience":"Customer facing"},{"name":"Sprout social","category":"Social media","owner":"Engagement","criticality":"Business critical","rag":"Green","crm_integration":"","other_integrations":"LinkedIn\nInstagram\nX\nTikTok\nPintrest\nYoutube","integration_context":"","cost":"TBC","description":"A social media management and analytics platform.","notes":"Moving platforms would be difficult\nLots of historic data\nModeration tool is great\nIndustry leader\n\nWeakeness:\nNeeds multiple licences for it to work effectively.","tech_type":"Social Media Management Platform","audience":"Internal tool"},{"name":"Stripe","category":"Fundraising and events","owner":"IGLegacies","criticality":"Mission critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"Engaging Networks","integration_context":"Stripes pushes Transaction ID into SAGE. Integrates natively with Engaging Networks to facilitate payments","cost":"TBC","description":"An online payment processing platform for businesses.","notes":"Weakness:\n\nInteraction with CRM leaves a bit to be desired. No further detail on what this means","tech_type":"Fintech","audience":"Internal tool"},{"name":"Give a little","category":"Fundraising and events","owner":"Volunteering","criticality":"Unknown","rag":"Unknown","crm_integration":"Yes push","other_integrations":"","integration_context":"","cost":"TBC","description":"Card payments for Groups to take donations","notes":"","tech_type":"POS","audience":"Customer facing"},{"name":"The recycling factory","category":"Fundraising and events","owner":"Partnerships","criticality":"Important but not critical","rag":"Red","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"The Recycling Factory collects used ink cartridges, mobile phones, and small electronics, recycling or refurbishing them and converting their value into donations for charities, schools, and community groups.","notes":"No engagement","tech_type":"App based","audience":"Customer facing"},{"name":"Thrift","category":"Fundraising and events","owner":"CEvents","criticality":"Important but not critical","rag":"Unknown","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"Website for Recycling clothes","notes":"","tech_type":"Donation platform","audience":"Customer facing"},{"name":"Tik Tok","category":"Social media","owner":"Engagement","criticality":"Business critical","rag":"Green","crm_integration":"","other_integrations":"Sprout social","integration_context":"","cost":"\u00a30","description":"A short-form video social media platform.","notes":"Key for younger audiences\nFaster growning channel\nDiversifying from Meta\n\nWeakness:\nData stored/processed outside the EU but there's plans for data centres to be built in EU.\nResource intensive for channel (video production resource)","tech_type":"Social Media Platform","audience":"Customer facing"},{"name":"Uptime robot","category":"Data and insight","owner":"Engagement","criticality":"Important but not critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"A website monitoring service for uptime and performance.","notes":"","tech_type":"SaaS","audience":"Internal tool"},{"name":"Videoscribe","category":"Social media","owner":"Engagement","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"Sparkol product, allows users of any skill level to create animated explainer videos.","notes":"","tech_type":"SaaS","audience":"Internal tool"},{"name":"Vimeo","category":"Digital engagement","owner":"Engagement","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"A video hosting and streaming platform.","notes":"Weakness:\n- We pay annual for it but we don't actively use this platform much","tech_type":"Content Hosting Platform","audience":"Customer facing"},{"name":"Webuybooks","category":"Fundraising and events","owner":"Partnerships","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"WeBuyBooks buys unwanted books, CDs, DVDs, and games, providing instant quotes and free postage, turning used media into cash while decluttering homes.","notes":"","tech_type":"App based","audience":"Customer facing"},{"name":"WhatsApp","category":"Digital engagement","owner":"Unknown","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"A messaging application for text, voice, and video communication.","notes":"Strengths:\nEveryone uses it","tech_type":"Messaging Service","audience":"Customer facing"},{"name":"Windows MovieMaker","category":"Website and content management","owner":"Engagement","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"A discontinued Microsoft video editing application designed for basic video creation and editing, aimed primarily at beginners and bundled with earlier versions of Windows","notes":"Weakness:\n- Discontinued software","tech_type":"Video editing software","audience":"Internal tool"},{"name":"X","category":"Social media","owner":"Engagement","criticality":"Important but not critical","rag":"Red","crm_integration":"","other_integrations":"Sprout social","integration_context":"","cost":"\u00a30","description":"A social media and microblogging platform formerly known as Twitter.","notes":"Planned to be retired and moving to Bluesky","tech_type":"Social Media Platform","audience":"Customer facing"},{"name":"YouTube","category":"Digital engagement","owner":"Engagement","criticality":"Business critical","rag":"Green","crm_integration":"","other_integrations":"Sprout social","integration_context":"","cost":"\u00a30","description":"A video sharing and streaming platform.","notes":"Has potential to be used better\nWeakness:\nResource intensive for channel (video production resource)","tech_type":"Social Media Platform","audience":"Customer facing"},{"name":"Zoom","category":"Services and support systems","owner":"Engagement","criticality":"Important but not critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"\u00a30","description":"A video conferencing and online meeting platform. We use it to call participants in our Stories and host meetings","notes":"Strengths:\nZoom is familar, not everyone has Teams","tech_type":"Video conferencing","audience":"both"},{"name":"8x8","category":"Services and support systems","owner":"InfoSystems","criticality":"Unknown","rag":"Unknown","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"The 8x8, Inc. phone system is a cloud-based business communications platform. Instead of traditional desk phone lines, it runs over the internet (VoIP), combining calling, messaging, and video into one system.","notes":"","tech_type":"","audience":"both"},{"name":"Microsoft Suite: Outlook, Teams, Forms, Sharepoint","category":"Services and support systems","owner":"InfoSystems","criticality":"Unknown","rag":"Unknown","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"","notes":"","tech_type":"","audience":"both"},{"name":"MailChimp","category":"Digital engagement","owner":"Local Groups","criticality":"Unknown","rag":"Unknown","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"Platform that facilitates email marketing","notes":"","tech_type":"Engagement tool","audience":"both"},{"name":"We Transfer - sending stuff Hannah","category":"Digital engagement","owner":"Engagement","criticality":"Business critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"For sending large files via the business account","notes":"","tech_type":"file transfer tool","audience":"both"},{"name":"Quantrix - sending stuff Hannah","category":"Digital engagement","owner":"InfoSystems","criticality":"Business critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"For sending large file securely","notes":"","tech_type":"SFTP","audience":"both"},{"name":"Data Lake /SQL server","category":"Data and insight","owner":"Unknown","criticality":"Unknown","rag":"Unknown","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"This is where we house additional data that isn't always available to view on Sage/perform analysis in","notes":"","tech_type":"","audience":"Internal tool"},{"name":"OMG Open Mobile Global","category":"Fundraising and events","owner":"IGLegacies","criticality":"Important but not critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"Kingsway Soft","integration_context":"","cost":"","description":"Used to facilitate SMS donations","notes":"Strengths:\nNot alot of admin. Does have 11 active regular givers.","tech_type":"","audience":"Customer facing"},{"name":"Givergy","category":"Fundraising and events","owner":"Special Events","criticality":"Mission critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"BACs payments directly to bank","cost":"\u00a35040","description":"Auction platform for event auctions, and  handles donations","notes":"Weakness: \n- Clunky platform. Things in bulk need to be done by Givergy \n\nStrengths: \n- Contact there is responsive and great. \n- Tried and tested platform\n- It works on the day","tech_type":"Donation platform","audience":"both"},{"name":"Ethical","category":"Fundraising and events","owner":"IGLegacies","criticality":"Mission critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"Manual imports into SAGE  via spreadsheets","integration_context":"Manual imports into SAGE  via spreadsheets","cost":"TBC","description":"Telemarketing agency for fundraising calls","notes":"","tech_type":"Telemarketing","audience":"Customer facing"},{"name":"REAL","category":"Fundraising and events","owner":"IGLegacies","criticality":"Mission critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"Used for face to face fundraising. Do welcome calls","notes":"","tech_type":"Face to face","audience":"Customer facing"},{"name":"Intygra","category":"Fundraising and events","owner":"IGLegacies","criticality":"Mission critical","rag":"Green","crm_integration":"","other_integrations":"","integration_context":"","cost":"Bespoke costing per project depending on spec","description":"Sends out stewardship thank yous and advance notice letters after a fundraising acquistion via REAL. They also facilitate the direct mail appeals out.","notes":"Strength: \nTrusted supplier who provide a quality service.","tech_type":"DM provider/printer","audience":"Customer facing"},{"name":"CAF","category":"Fundraising and events","owner":"Unknown","criticality":"Unknown","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"","cost":"TBC","description":"","notes":"","tech_type":"","audience":""},{"name":"Go Fund me","category":"Fundraising and events","owner":"CEvents","criticality":"Business critical","rag":"Amber","crm_integration":"","other_integrations":"","integration_context":"Evidence of Go Fund Me being a payment source not found in SAGE. Likely donors donate themselves afterwards","cost":"TBC","description":"Peer to peer crowdfunding platform.","notes":"","tech_type":"Fundraising","audience":"Customer facing"},{"name":"Paragon","category":"Fundraising and events","owner":"CustomerServices","criticality":"Business critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"Kingsway Soft","integration_context":"Data uploaded via Kingsway Soft. Not native integration","cost":"TBC","description":"Paragon process donations on our behalf and handle our mail to Carriage House","notes":"","tech_type":"Donation processing","audience":"Internal tool"},{"name":"Woods Val data","category":"Fundraising and events","owner":"IGLegacies","criticality":"Mission critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"Kingsway Soft","integration_context":"Data uploaded via Kingsway Soft. Not native integration","cost":"TBC","description":"Woods Val Data process  donations on our behalf (to specific appeals, eg. Cold dms etc). Also manage raffle and the raffle microsite","notes":"Strength: \nLong standing supplier.\n\nWeaknesses:\nComplicated processes and recurrent errors.","tech_type":"Fulfillment/response handling/Product Manager","audience":"both"},{"name":"CFP","category":"Fundraising and events","owner":"IGLegacies","criticality":"Mission critical","rag":"Amber","crm_integration":"Yes push","other_integrations":"Kingsway Soft","integration_context":"Data uploaded via Kingsway Soft. Not native integration","cost":"\u00a3108,000","description":"Manages the MS Society lottery microsite and lottery ticket sales and processing. They manage the  whole process including the winner choices and announcements","notes":"Strong supplier relationship; proactive and fully knowledgeable.  Any discrepanices/errors are rectified easily","tech_type":"Fulfillment/response handling/Product Manager","audience":"both"}];
+
+const CAT_COLORS = {
+  'Analytics and UX':'#D8633A','CRM and supporter data':'#1D9E75',
+  'Data and insight':'#5B8FCC','Digital engagement':'#8B82E8',
+  'Email marketing':'#EF9F27','Fundraising and events':'#5DB870',
+  'Internal':'#888780','Services and support systems':'#7A9BBF',
+  'Social media':'#D4537E','Unknown':'#555555',
+  'Website and content management':'#4A9FE8'
+};
+const OWNER_COLORS = {
+  'CEvents':'#E8824A','CustomerServices':'#7A9BBF','Engagement':'#4A9FE8',
+  'IGLegacies':'#C97070','InfoSystems':'#1D9E75','Local Groups':'#888780',
+  'Partnerships':'#5DB870','Philanthropy':'#9B82E8','Research_policy':'#D8633A',
+  'Services':'#EF9F27','Special Events':'#D4537E','Strategy & Data':'#8BB85D',
+  'Unknown':'#555555','Volunteering':'#E8C84A'
+};
+
+// CRM connections: systems that push/pull into Dynamics
+const CRM_ID = 'CRM and supporter data';
+const CONNECTIONS = [];
+// Build cluster-level connections: anything with crm_integration goes to CRM cluster
+const crmSystems = RAW.filter(r => r.crm_integration && r.crm_integration.trim());
+
+// ═══════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════
+let groupBy = 'category'; // 'category' | 'owner'
+let tx=0,ty=0,scale=1,dragging=false,dragSX=0,dragSY=0,txS=0,tyS=0;
+let selectedGroup=null;
+let activeRag = new Set(['Green','Amber','Red','Unknown']);
+let activeCrit = new Set(['Mission critical','Business critical','Important but not critical','Unknown']);
+let searchQ='';
+
+const canvas = document.getElementById('canvas');
+const svgLayer = document.getElementById('svg-layer');
+const wrap = document.getElementById('canvas-wrap');
+const NS = 'http://www.w3.org/2000/svg';
+
+let clusterEls = {};  // groupKey -> DOM element
+let clusterData = {}; // groupKey -> {label, color, systems[]}
+let pathEls = [];     // [{path, fromKey, toKey, color}]
+
+// ═══════════════════════════════════════════════════
+//  GROUPING
+// ═══════════════════════════════════════════════════
+function getGroupKey(sys){ return groupBy==='category' ? sys.category : sys.owner; }
+function getColor(key){ return groupBy==='category' ? (CAT_COLORS[key]||'#555') : (OWNER_COLORS[key]||'#555'); }
+
+function buildGroups(){
+  const groups = {};
+  RAW.forEach(sys => {
+    const key = getGroupKey(sys);
+    if(!groups[key]) groups[key]={label:key,color:getColor(key),systems:[]};
+    groups[key].systems.push(sys);
+  });
+  return groups;
+}
+
+// ═══════════════════════════════════════════════════
+//  RENDER CLUSTERS
+// ═══════════════════════════════════════════════════
+function critClass(c){
+  if(c==='Mission critical') return 'mc';
+  if(c==='Business critical') return 'bc';
+  if(c==='Important but not critical') return 'imp';
+  return 'u';
+}
+function critShort(c){
+  if(c==='Mission critical') return 'Mission critical';
+  if(c==='Business critical') return 'Business critical';
+  if(c==='Important but not critical') return 'Important';
+  return 'Unknown';
+}
+function ragClass(r){return{Green:'g',Amber:'a',Red:'r'}[r]||'u'}
+
+function buildNodeHTML(sys){
+  const hasCRM = sys.crm_integration && sys.crm_integration.trim();
+  const cc = critClass(sys.criticality);
+  const rc = ragClass(sys.rag);
+  const costTxt = sys.cost && sys.cost!=='TBC' && sys.cost.trim() ? sys.cost : '';
+  const shouldHide = !activeRag.has(sys.rag) || !activeCrit.has(sys.criticality) || (searchQ && !sys.name.toLowerCase().includes(searchQ) && !sys.category.toLowerCase().includes(searchQ) && !sys.owner.toLowerCase().includes(searchQ));
+  return `<div class="nd${hasCRM?' crm-linked':''}${shouldHide?' hidden':''}" data-system="${encodeURIComponent(sys.name)}">
+    <div class="nd-name">${sys.name}</div>
+    <div class="nd-row">
+      <div class="rag ${rc}"></div>
+      <span class="crit ${cc}">${critShort(sys.criticality)}</span>
+      ${hasCRM?'<span class="crm-tag">→ CRM</span>':''}
+      ${costTxt?`<span class="cost">${costTxt}</span>`:''}
+    </div>
+  </div>`;
+}
+
+function renderClusters(){
+  // Remove old clusters
+  document.querySelectorAll('.cluster').forEach(el=>el.remove());
+  // Clear svg
+  while(svgLayer.firstChild) svgLayer.removeChild(svgLayer.firstChild);
+  pathEls = [];
+  clusterEls = {};
+  clusterData = {};
+
+  const groups = buildGroups();
+  // Sort by number of systems desc
+  const sorted = Object.entries(groups).sort((a,b)=>b[1].systems.length-a[1].systems.length);
+
+  sorted.forEach(([key,grp])=>{
+    clusterData[key]=grp;
+    const el = document.createElement('div');
+    el.className='cluster';
+    el.id='cl-'+key.replace(/\s+/g,'_');
+    el.style.left='0px';el.style.top='0px';el.style.opacity='0';
+    el.style.borderColor = grp.color+'55';
+    el.innerHTML=`<div class="cl-head" style="background:${grp.color}18">
+      <span class="cl-name" style="color:${grp.color}">${grp.label}</span>
+      <span class="cl-count">${grp.systems.length}</span>
+    </div>
+    <div class="cl-body">${grp.systems.map(buildNodeHTML).join('')}</div>`;
+    el.addEventListener('click', e=>{ e.stopPropagation(); selectGroup(key); });
+    canvas.appendChild(el);
+    clusterEls[key]=el;
+  });
+
+  // Build SVG defs
+  const defs=document.createElementNS(NS,'defs');
+  const usedColors=new Set();
+
+  // Connections: each cluster that has CRM-integrated systems → CRM cluster
+  // But only if the groupBy!=category or there are cross-cluster integrations
+  const crmGroupKey = groupBy==='category' ? 'CRM and supporter data' : null;
+
+  if(crmGroupKey && clusterEls[crmGroupKey]){
+    Object.entries(groups).forEach(([key,grp])=>{
+      if(key===crmGroupKey) return;
+      const hasCRMlink = grp.systems.some(s=>s.crm_integration&&s.crm_integration.trim());
+      if(!hasCRMlink) return;
+      const color = grp.color;
+      usedColors.add(color);
+      const safeId='arr'+color.replace('#','');
+      const path=document.createElementNS(NS,'path');
+      path.classList.add('conn-path');
+      path.setAttribute('stroke',color);
+      path.setAttribute('stroke-dasharray','none');
+      path.setAttribute('marker-end',`url(#${safeId})`);
+      path.setAttribute('opacity','0.5');
+      svgLayer.appendChild(path);
+      pathEls.push({path,fromKey:key,toKey:crmGroupKey,color});
+    });
+  } else if(groupBy==='owner'){
+    // For owner view: show connections between owners based on cross-owner integrations
+    // Simplified: show any system with CRM integration connecting to InfoSystems (Dynamics owner)
+    const dynOwner = 'InfoSystems';
+    if(clusterEls[dynOwner]){
+      Object.entries(groups).forEach(([key,grp])=>{
+        if(key===dynOwner) return;
+        const hasCRMlink = grp.systems.some(s=>s.crm_integration&&s.crm_integration.trim());
+        if(!hasCRMlink) return;
+        const color = grp.color;
+        usedColors.add(color);
+        const path=document.createElementNS(NS,'path');
+        path.classList.add('conn-path');
+        path.setAttribute('stroke',color);
+        path.setAttribute('marker-end',`url(#arr${color.replace('#','')})`);
+        path.setAttribute('opacity','0.5');
+        svgLayer.appendChild(path);
+        pathEls.push({path,fromKey:key,toKey:dynOwner,color});
+      });
+    }
+  }
+
+  usedColors.forEach(color=>{
+    const mid=document.createElementNS(NS,'marker');
+    const safeId='arr'+color.replace('#','');
+    mid.setAttribute('id',safeId);mid.setAttribute('viewBox','0 0 8 8');
+    mid.setAttribute('refX','7');mid.setAttribute('refY','4');
+    mid.setAttribute('markerWidth','5');mid.setAttribute('markerHeight','5');
+    mid.setAttribute('orient','auto');
+    const p=document.createElementNS(NS,'path');
+    p.setAttribute('d','M1,1 L7,4 L1,7');p.setAttribute('fill','none');
+    p.setAttribute('stroke',color);p.setAttribute('stroke-width','1.5');
+    p.setAttribute('stroke-linecap','round');p.setAttribute('stroke-linejoin','round');
+    mid.appendChild(p);defs.appendChild(mid);
+  });
+  svgLayer.insertBefore(defs,svgLayer.firstChild);
+}
+
+// ═══════════════════════════════════════════════════
+//  AUTO LAYOUT
+// ═══════════════════════════════════════════════════
+function autoLayout(){
+  const keys = Object.keys(clusterEls);
+  const sizes={};
+  keys.forEach(k=>{
+    const el=clusterEls[k];
+    sizes[k]={w:el.offsetWidth||260,h:el.offsetHeight||300};
+  });
+
+  const GAP=60, RING=700;
+  const pos={};
+  // Put CRM/InfoSystems at centre
+  const hubKey = groupBy==='category'?'CRM and supporter data':'InfoSystems';
+  if(clusterEls[hubKey]) pos[hubKey]={x:-(sizes[hubKey]?.w||260)/2,y:-(sizes[hubKey]?.h||200)/2};
+  const others=keys.filter(k=>k!==hubKey);
+  others.forEach((k,i)=>{
+    const angle=(i/others.length)*Math.PI*2-Math.PI/2;
+    pos[k]={x:Math.cos(angle)*RING-(sizes[k].w/2),y:Math.sin(angle)*RING-(sizes[k].h/2)};
+  });
+
+  // Force separation
+  for(let iter=0;iter<250;iter++){
+    const forces={};
+    keys.forEach(k=>forces[k]={x:0,y:0});
+    for(let i=0;i<keys.length;i++){
+      for(let j=i+1;j<keys.length;j++){
+        const a=keys[i],b=keys[j],pa=pos[a],pb=pos[b],sa=sizes[a],sb=sizes[b];
+        const cx=(pa.x+sa.w/2)-(pb.x+sb.w/2);
+        const cy=(pa.y+sa.h/2)-(pb.y+sb.h/2);
+        const mdx=(sa.w+sb.w)/2+GAP, mdy=(sa.h+sb.h)/2+GAP;
+        const px=mdx-Math.abs(cx),py=mdy-Math.abs(cy);
+        if(px>0&&py>0){
+          const s=0.52;
+          if(px<py){const d=px*s*Math.sign(cx);forces[a].x+=d;forces[b].x-=d;}
+          else{const d=py*s*Math.sign(cy);forces[a].y+=d;forces[b].y-=d;}
+        }
+      }
+    }
+    keys.forEach(k=>{pos[k].x+=forces[k].x;pos[k].y+=forces[k].y;});
+  }
+
+  keys.forEach(k=>{
+    const el=clusterEls[k];
+    el.style.left=Math.round(pos[k].x)+'px';
+    el.style.top=Math.round(pos[k].y)+'px';
+    el.style.opacity='1';
+    el.style.transition='opacity 0.4s ease';
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  SVG CONNECTIONS
+// ═══════════════════════════════════════════════════
+function getCenter(key){
+  const el=clusterEls[key];
+  if(!el) return null;
+  const x=parseFloat(el.style.left),y=parseFloat(el.style.top);
+  const w=el.offsetWidth||260,h=el.offsetHeight||300;
+  return{x:x+w/2,y:y+h/2,left:x,top:y,right:x+w,bottom:y+h,w,h};
+}
+function edgePt(r,ox,oy){
+  const dx=ox-r.x,dy=oy-r.y,hw=r.w/2,hh=r.h/2;
+  if(Math.abs(dx)*hh>Math.abs(dy)*hw){const s=dx>0?1:-1;return{x:r.x+s*hw,y:r.y+(dy/dx)*s*hw};}
+  else{const s=dy>0?1:-1;return{x:r.x+(dx/dy)*s*hh,y:r.y+s*hh};}
+}
+function cubic(x1,y1,x2,y2){
+  const dx=x2-x1,dy=y2-y1,t=Math.min(140,Math.abs(dx)*.5,Math.abs(dy)*.5)+70;
+  let cx1=x1,cy1=y1,cx2=x2,cy2=y2;
+  if(Math.abs(dx)>Math.abs(dy)){cx1+=t;cx2-=t;}else{cy1+=t;cy2-=t;}
+  return`M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`;
+}
+function redrawConnections(){
+  pathEls.forEach(({path,fromKey,toKey})=>{
+    const a=getCenter(fromKey),b=getCenter(toKey);
+    if(!a||!b) return;
+    const e1=edgePt(a,b.x,b.y),e2=edgePt(b,a.x,a.y);
+    path.setAttribute('d',cubic(e1.x,e1.y,e2.x,e2.y));
+  });
+  const W=10000,H=10000;
+  svgLayer.setAttribute('width',W);svgLayer.setAttribute('height',H);
+  svgLayer.setAttribute('viewBox',`-5000 -5000 ${W} ${H}`);
+  updateMinimap();
+}
+
+// ═══════════════════════════════════════════════════
+//  PAN & ZOOM
+// ═══════════════════════════════════════════════════
+function setT(nx,ny,ns){
+  scale=Math.min(2.5,Math.max(.15,ns));tx=nx;ty=ny;
+  canvas.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
+  document.getElementById('zoom-label').textContent=Math.round(scale*100)+'%';
+  updateMinimap();
+}
+function fitAll(){
+  const vw=wrap.clientWidth,vh=wrap.clientHeight;
+  let mnX=Infinity,mnY=Infinity,mxX=-Infinity,mxY=-Infinity;
+  Object.keys(clusterEls).forEach(k=>{
+    const el=clusterEls[k];
+    const x=parseFloat(el.style.left)||0,y=parseFloat(el.style.top)||0;
+    const w=el.offsetWidth||260,h=el.offsetHeight||300;
+    mnX=Math.min(mnX,x);mnY=Math.min(mnY,y);mxX=Math.max(mxX,x+w);mxY=Math.max(mxY,y+h);
+  });
+  const pad=60,cw=mxX-mnX+pad*2,ch=mxY-mnY+pad*2;
+  const s=Math.min(vw/cw,vh/ch,.95);
+  setT((vw-cw*s)/2-mnX*s+pad*s,(vh-ch*s)/2-mnY*s+pad*s,s);
+}
+
+wrap.addEventListener('mousedown',e=>{if(e.button!==0)return;dragging=true;dragSX=e.clientX;dragSY=e.clientY;txS=tx;tyS=ty;wrap.classList.add('grabbing')});
+window.addEventListener('mousemove',e=>{if(!dragging)return;setT(txS+e.clientX-dragSX,tyS+e.clientY-dragSY,scale)});
+window.addEventListener('mouseup',()=>{dragging=false;wrap.classList.remove('grabbing')});
+wrap.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=wrap.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  const ns=Math.min(2.5,Math.max(.15,scale*(1+-e.deltaY*.001)));
+  setT(mx-(mx-tx)*(ns/scale),my-(my-ty)*(ns/scale),ns);
+},{passive:false});
+
+// Touch
+let touches={};
+wrap.addEventListener('touchstart',e=>{e.preventDefault();[...e.changedTouches].forEach(t=>touches[t.identifier]={x:t.clientX,y:t.clientY});if(Object.keys(touches).length===1){const t=e.touches[0];dragging=true;dragSX=t.clientX;dragSY=t.clientY;txS=tx;tyS=ty;}},{passive:false});
+wrap.addEventListener('touchmove',e=>{e.preventDefault();const ids=Object.keys(touches);if(ids.length===1&&dragging){const t=e.touches[0];setT(txS+t.clientX-dragSX,tyS+t.clientY-dragSY,scale);}else if(ids.length===2){const[a,b]=[...e.touches],pa=touches[a.identifier],pb=touches[b.identifier];if(!pa||!pb)return;const pd=Math.hypot(pa.x-pb.x,pa.y-pb.y),nd=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),r=nd/pd,mx=(a.clientX+b.clientX)/2,my=(a.clientY+b.clientY)/2,ns=Math.min(2.5,Math.max(.15,scale*r));setT(mx-(mx-tx)*(ns/scale),my-(my-ty)*(ns/scale),ns);touches[a.identifier]={x:a.clientX,y:a.clientY};touches[b.identifier]={x:b.clientX,y:b.clientY};}},{passive:false});
+wrap.addEventListener('touchend',e=>{[...e.changedTouches].forEach(t=>delete touches[t.identifier]);if(!Object.keys(touches).length)dragging=false;},{passive:false});
+
+// ═══════════════════════════════════════════════════
+//  SELECTION
+// ═══════════════════════════════════════════════════
+function selectGroup(key){
+  if(selectedGroup===key){deselect();return;}
+  selectedGroup=key;
+  const connected=new Set([key]);
+  pathEls.forEach(({fromKey,toKey})=>{if(fromKey===key)connected.add(toKey);if(toKey===key)connected.add(fromKey);});
+  Object.keys(clusterEls).forEach(k=>{
+    const el=clusterEls[k];
+    if(k===key){el.classList.add('selected');el.classList.remove('dimmed')}
+    else if(connected.has(k)){el.classList.remove('selected','dimmed')}
+    else{el.classList.remove('selected');el.classList.add('dimmed')}
+  });
+  pathEls.forEach(({path,fromKey,toKey})=>{
+    const active=fromKey===key||toKey===key;
+    path.classList.toggle('highlighted',active);
+    path.classList.toggle('dimmed',!active);
+  });
+  showDetail(key);
+}
+function deselect(){
+  selectedGroup=null;
+  Object.keys(clusterEls).forEach(k=>clusterEls[k].classList.remove('selected','dimmed'));
+  pathEls.forEach(({path})=>path.classList.remove('highlighted','dimmed'));
+  document.getElementById('detail').classList.remove('open');
+}
+wrap.addEventListener('click',e=>{if(e.target===wrap||e.target===canvas||e.target===svgLayer)deselect()});
+
+// ═══════════════════════════════════════════════════
+//  DETAIL PANEL
+// ═══════════════════════════════════════════════════
+function showDetail(key){
+  const grp=clusterData[key];
+  const panel=document.getElementById('detail');
+  document.getElementById('detail-title').textContent=grp.label;
+  document.getElementById('detail-subtitle').textContent=`${grp.systems.length} systems · click an integration to navigate`;
+
+  const conns=pathEls.filter(p=>p.fromKey===key||p.toKey===key);
+  const crmSys=grp.systems.filter(s=>s.crm_integration&&s.crm_integration.trim());
+
+  const ragCount={Green:0,Amber:0,Red:0,Unknown:0};
+  grp.systems.forEach(s=>ragCount[s.rag]=(ragCount[s.rag]||0)+1);
+
+  const body=document.getElementById('detail-body');
+  body.innerHTML=`
+    <div class="d-sec">
+      <div class="d-stat"><span class="d-stat-label">Total systems</span><span class="d-stat-val">${grp.systems.length}</span></div>
+      <div class="d-stat"><span class="d-stat-label">CRM integrated</span><span class="d-stat-val" style="color:#1D9E75">${crmSys.length}</span></div>
+      <div class="d-stat"><span class="d-stat-label">Green RAG</span><span class="d-stat-val" style="color:#1D9E75">${ragCount.Green||0}</span></div>
+      <div class="d-stat"><span class="d-stat-label">Amber RAG</span><span class="d-stat-val" style="color:#EF9F27">${ragCount.Amber||0}</span></div>
+      <div class="d-stat"><span class="d-stat-label">Red RAG</span><span class="d-stat-val" style="color:#E24B4A">${ragCount.Red||0}</span></div>
+      <div class="d-stat"><span class="d-stat-label">Unknown RAG</span><span class="d-stat-val" style="color:#555">${ragCount.Unknown||0}</span></div>
+    </div>
+    ${conns.length?`<div class="d-sec">
+      <div class="d-sec-title">Cluster integrations (${conns.length})</div>
+      ${conns.map(c=>{
+        const other=c.fromKey===key?c.toKey:c.fromKey;
+        const grpO=clusterData[other]||{label:other,color:'#555'};
+        const dir=c.fromKey===key?'→':'←';
+        return`<div class="d-conn" onclick="selectGroup('${other.replace(/'/g,"\'")}')">
+          <div class="d-conn-inner"><div class="d-conn-dot" style="background:${c.color}"></div>
+          <div><div class="d-conn-name">${dir} ${grpO.label}</div>
+          <div class="d-conn-desc">CRM data integration</div></div></div>
+        </div>`;
+      }).join('')}
+    </div>`:''}
+    <div class="d-sec">
+      <div class="d-sec-title">All systems (${grp.systems.length})</div>
+      ${grp.systems.map(s=>{
+        const hasCRM=s.crm_integration&&s.crm_integration.trim();
+        const rc=ragClass(s.rag),cc=critClass(s.criticality);
+        const costTxt=s.cost&&s.cost!=='TBC'&&s.cost.trim()?s.cost:'';
+        return`<div class="d-nd${hasCRM?' crm-linked':''}">
+          <div class="d-nd-row">
+            <div class="rag ${rc}"></div>
+            <span class="crit ${cc}">${critShort(s.criticality)}</span>
+            ${hasCRM?'<span class="crm-tag">→ CRM</span>':''}
+            ${costTxt?`<span class="cost">${costTxt}</span>`:''}
+          </div>
+          <div class="d-nd-name">${s.name}</div>
+          <div class="d-nd-meta">${s.tech_type||''}</div>
+          ${hasCRM?`<div class="d-nd-crm">CRM: ${s.crm_integration}</div>`:''}
+          ${s.other_integrations&&s.other_integrations!='nan'?`<div class="d-nd-int">Integrations: ${s.other_integrations.replace(/\n/g,', ')}</div>`:''}
+          ${s.description?`<div class="d-nd-desc">${s.description}</div>`:''}
+          ${s.notes?`<div class="d-nd-notes">${s.notes.substring(0,200)}${s.notes.length>200?'…':''}</div>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
+  panel.classList.add('open');
+}
+
+document.getElementById('detail-close-btn').addEventListener('click',deselect);
+
+// ═══════════════════════════════════════════════════
+//  FILTERS
+// ═══════════════════════════════════════════════════
+function applyFilters(){
+  Object.entries(clusterEls).forEach(([key,el])=>{
+    const grp=clusterData[key];
+    const nodes=el.querySelectorAll('.nd');
+    let vis=0;
+    nodes.forEach((nd,i)=>{
+      const sys=grp.systems[i];
+      const ragOk=activeRag.has(sys.rag);
+      const critOk=activeCrit.has(sys.criticality);
+      const qOk=!searchQ||sys.name.toLowerCase().includes(searchQ)||sys.category.toLowerCase().includes(searchQ)||sys.owner.toLowerCase().includes(searchQ)||sys.description.toLowerCase().includes(searchQ);
+      const show=ragOk&&critOk&&qOk;
+      nd.classList.toggle('hidden',!show);
+      if(show)vis++;
+    });
+    el.querySelector('.cl-count').textContent=vis+'/'+grp.systems.length;
+    el.style.opacity=vis===0?'0.2':'1';
+  });
+  setTimeout(()=>{redrawConnections();updateMinimap();},30);
+}
+
+document.getElementById('rag-filters').addEventListener('click',e=>{
+  const btn=e.target.closest('[data-rag]');if(!btn)return;
+  const r=btn.dataset.rag;
+  if(activeRag.has(r))activeRag.delete(r);else activeRag.add(r);
+  btn.classList.toggle('on',activeRag.has(r));
+  applyFilters();
+});
+
+document.getElementById('crit-filters').addEventListener('click',e=>{
+  const btn=e.target.closest('[data-crit]');if(!btn)return;
+  const c=btn.dataset.crit;
+  if(activeCrit.has(c))activeCrit.delete(c);else activeCrit.add(c);
+  btn.classList.toggle('on',activeCrit.has(c));
+  applyFilters();
+});
+
+// Group toggle
+document.querySelectorAll('.gtb').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    if(btn.dataset.group===groupBy)return;
+    groupBy=btn.dataset.group;
+    document.querySelectorAll('.gtb').forEach(b=>b.classList.toggle('on',b.dataset.group===groupBy));
+    deselect();
+    renderClusters();
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{autoLayout();redrawConnections();fitAll();updateMinimap();}));
+  });
+});
+
+// ═══════════════════════════════════════════════════
+//  SEARCH
+// ═══════════════════════════════════════════════════
+const searchEl=document.getElementById('search');
+const resultsEl=document.getElementById('search-results');
+searchEl.addEventListener('input',()=>{
+  searchQ=searchEl.value.toLowerCase().trim();
+  if(!searchQ){resultsEl.style.display='none';applyFilters();return;}
+  const hits=[];
+  Object.entries(clusterData).forEach(([key,grp])=>{
+    grp.systems.forEach(s=>{
+      if(s.name.toLowerCase().includes(searchQ)||s.description.toLowerCase().includes(searchQ)){
+        hits.push({key,sys:s});
+      }
+    });
+  });
+  applyFilters();
+  if(!hits.length){resultsEl.style.display='none';return;}
+  resultsEl.innerHTML=hits.slice(0,10).map(h=>`<div class="sr-item" data-key="${encodeURIComponent(h.key)}"><div class="sr-name">${h.sys.name}</div><div class="sr-meta">${h.sys.category} · ${h.sys.owner}</div></div>`).join('');
+  resultsEl.style.display='block';
+});
+resultsEl.addEventListener('click',e=>{
+  const item=e.target.closest('.sr-item');if(!item)return;
+  const key=decodeURIComponent(item.dataset.key);
+  resultsEl.style.display='none';searchEl.value='';searchQ='';
+  applyFilters();flyTo(key);setTimeout(()=>selectGroup(key),400);
+});
+document.addEventListener('click',e=>{if(!searchEl.contains(e.target)&&!resultsEl.contains(e.target))resultsEl.style.display='none';});
+
+function flyTo(key){
+  const el=clusterEls[key];if(!el)return;
+  const x=parseFloat(el.style.left),y=parseFloat(el.style.top);
+  const w=el.offsetWidth||260,h=el.offsetHeight||300;
+  const cx=x+w/2,cy=y+h/2;
+  const vw=wrap.clientWidth,vh=wrap.clientHeight;
+  setT(vw/2-cx*scale,vh/2-cy*scale,scale);
+}
+
+// ═══════════════════════════════════════════════════
+//  MINIMAP
+// ═══════════════════════════════════════════════════
+const mmCanvas=document.getElementById('mm-canvas');
+const mmCtx=mmCanvas.getContext('2d');
+const mmVp=document.getElementById('mm-vp');
+function updateMinimap(){
+  const mw=mmCanvas.width,mh=mmCanvas.height;
+  mmCtx.clearRect(0,0,mw,mh);
+  let mnX=Infinity,mnY=Infinity,mxX=-Infinity,mxY=-Infinity;
+  Object.keys(clusterEls).forEach(k=>{
+    const el=clusterEls[k];
+    const x=parseFloat(el.style.left)||0,y=parseFloat(el.style.top)||0;
+    const w=el.offsetWidth||260,h=el.offsetHeight||300;
+    mnX=Math.min(mnX,x);mnY=Math.min(mnY,y);mxX=Math.max(mxX,x+w);mxY=Math.max(mxY,y+h);
+  });
+  const pad=40,bw=mxX-mnX+pad*2,bh=mxY-mnY+pad*2;
+  const s=Math.min(mw/bw,mh/bh);
+  const ox=(mw-bw*s)/2-mnX*s+pad*s,oy=(mh-bh*s)/2-mnY*s+pad*s;
+  pathEls.forEach(({fromKey,toKey,color})=>{
+    const a=getCenter(fromKey),b=getCenter(toKey);if(!a||!b)return;
+    mmCtx.beginPath();mmCtx.moveTo(a.x*s+ox,a.y*s+oy);mmCtx.lineTo(b.x*s+ox,b.y*s+oy);
+    mmCtx.strokeStyle=color+'55';mmCtx.lineWidth=1;mmCtx.stroke();
+  });
+  Object.entries(clusterEls).forEach(([k,el])=>{
+    const grp=clusterData[k];if(!grp)return;
+    const x=parseFloat(el.style.left)||0,y=parseFloat(el.style.top)||0;
+    const w=el.offsetWidth||260,h=el.offsetHeight||300;
+    mmCtx.fillStyle=grp.color+'30';mmCtx.strokeStyle=grp.color+'88';mmCtx.lineWidth=1;
+    mmCtx.beginPath();mmCtx.roundRect(x*s+ox,y*s+oy,w*s,h*s,2);mmCtx.fill();mmCtx.stroke();
+  });
+  const vw=wrap.clientWidth,vh=wrap.clientHeight;
+  mmVp.style.left=Math.max(0,(-tx/scale)*s+ox)+'px';mmVp.style.top=Math.max(0,(-ty/scale)*s+oy)+'px';
+  mmVp.style.width=(vw/scale)*s+'px';mmVp.style.height=(vh/scale)*s+'px';
+}
+
+// ═══════════════════════════════════════════════════
+//  TOOLBAR & KEYBOARD
+// ═══════════════════════════════════════════════════
+document.getElementById('btn-zi').addEventListener('click',()=>{const c=wrap.clientWidth/2,d=wrap.clientHeight/2,ns=Math.min(2.5,scale*1.2);setT(c-(c-tx)*(ns/scale),d-(d-ty)*(ns/scale),ns)});
+document.getElementById('btn-zo').addEventListener('click',()=>{const c=wrap.clientWidth/2,d=wrap.clientHeight/2,ns=Math.max(.15,scale/1.2);setT(c-(c-tx)*(ns/scale),d-(d-ty)*(ns/scale),ns)});
+document.getElementById('btn-fit').addEventListener('click',fitAll);
+document.getElementById('btn-help').addEventListener('click',()=>document.getElementById('help').classList.add('open'));
+document.getElementById('help-close').addEventListener('click',()=>document.getElementById('help').classList.remove('open'));
+document.getElementById('help').addEventListener('click',e=>{if(e.target===document.getElementById('help'))e.target.classList.remove('open')});
+document.addEventListener('keydown',e=>{
+  if(e.target===searchEl)return;
+  if(e.key==='Escape'){deselect();document.getElementById('help').classList.remove('open');}
+  if(e.key==='f'||e.key==='F')fitAll();
+  if(e.key==='+'||e.key==='=')document.getElementById('btn-zi').click();
+  if(e.key==='-')document.getElementById('btn-zo').click();
+  if(e.key==='/'){e.preventDefault();searchEl.focus();}
+});
+const ro=new ResizeObserver(()=>{redrawConnections();updateMinimap();});ro.observe(wrap);
+
+// ═══════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════
+function ragClass(r){return{Green:'g',Amber:'a',Red:'r'}[r]||'u'}
+function init(){
+  renderClusters();
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    autoLayout();redrawConnections();fitAll();updateMinimap();
+    const t=document.getElementById('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500);
+  }));
+}
+init();
+</script>
+</body>
+</html>
